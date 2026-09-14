@@ -1,0 +1,24 @@
+# Spec Impact Matrix — migra_db_mysql
+
+> Gerado pelo Architect em 2026-09-02 · Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
+>
+> Mapeia: se o componente da linha mudar, quais outros componentes/artefatos são impactados. Útil para o ciclo forward (`/reversa-forward`) avaliar o raio de impacto de uma mudança antes de codar.
+
+| Componente | Impacta diretamente | Impacto indireto / observações |
+|---|---|---|
+| **Output Helpers** (`info/ok/warn/error/header/ask/confirm`) | Todo o resto de `migrate_routines.py` (chamado por praticamente toda função) | Duplicado em `fix_collation_stamp.py` — mudar um não propaga para o outro (ADR-0005) |
+| **Config Resolver** (`CONFIG/cfg/cfg_ask/cfg_confirm/select_items/write_config_template`) | `main()` (todos os pontos de decisão interativa), `ask_connection` | Mudar uma chave dotted-path exige atualizar `write_config_template` (o modelo `--init-config`) e a documentação em `data-dictionary.md`/CLAUDE.md em conjunto — hoje são 3 lugares mantidos manualmente em sincronia |
+| **Connection Manager** (`connect/ask_connection/ensure_connected`) | Routine Extractor, Table Extractor, Routine Applier, FK Recovery Engine, Data Copier (tudo que precisa de `conn`) | Mudança no tratamento de erro de conexão (ex: novo código de erro tratado como `connect()` trata o 1115) afeta todo o fluxo de `main()` |
+| **Routine Transformer** (`TRANSFORMATIONS`, `transform_routine`) | Routine Applier (DDL que será aplicado), `migration.sql`/`retry_routines.sql` (conteúdo do relatório) | Adicionar uma transformação nova segue a receita documentada em CLAUDE.md ("Adding New Transformations") — impacta `code-analysis.md` (seção migracao-de-rotinas) e `data-dictionary.md` (tabela de códigos de Issue), que precisam ser atualizados junto |
+| **Table Transformer** (`TABLE_TRANSFORMATIONS`, `transform_table_ddl`) | FK Recovery Engine (opera sobre o DDL já transformado), Table Applier | Mudar `force_innodb`/engine padrão impacta diretamente o comportamento de `fix_table_engine_to_innodb` e a pergunta correspondente em `main()` |
+| **FK Recovery Engine** (`strip_foreign_keys/find_referencing_fks/drop_referencing_fks/apply_table/resolve_pending_foreign_keys`) | `pending_fks` (estado acumulado em `main()`), relatório final (issues `FK_REMOVED/FK_RESTORED/FK_NOT_RESTORED`) | Componente de maior complexidade — qualquer mudança aqui deve ser revalidada contra `state-machines.md` (ciclo de vida de tabela) e ADR-0002 |
+| **Data Copier** (`copy_table_data`) | `rows_copied`/`copy_error` no resultado de tabela, relatório | `BATCH_SIZE` afeta performance e frequência de commit — mudança de valor não tem teste automatizado para validar impacto |
+| **Report Generator** (`print_summary_table/print_table_summary/render_html_report/save_report`) | Nenhum outro componente de execução (é terminal no fluxo) | Mudar `report_data` (schema do JSON) quebra qualquer consumidor externo que dependa do formato — não há versionamento de schema do relatório |
+| **`fix_collation_stamp.py`** (inteiro) | Nenhum componente de `migrate_routines.py` (sem import cruzado) | Mudanças aqui **não** precisam considerar o script principal, e vice-versa — mas mudanças que deveriam ser espelhadas (ex: melhorar `connect()`) exigem edição manual dupla (ver ADR-0005) |
+| **`OLD_COLLATION`** (constante) | `find_stale_routines`, guarda de segurança em `main()` de `fix_collation_stamp.py` | Só suporta um cenário fixo de collation antigo→atual por execução; suportar múltiplos collations antigos exigiria refatorar para parâmetro/lista |
+| **Estrutura de `Issue`** | Serialização em `report.json`, exibição em `render_html_report`, comentários em `migration.sql` | Adicionar um campo novo à classe `Issue` exige atualizar as 3 serializações manualmente (nenhuma usa reflection/`__dict__` automático — ver `save_report:1286`) |
+| **CLAUDE.md** (documentação de arquitetura) | Nenhum componente de código diretamente, mas é a fonte de verdade consultada por agentes de IA (incluindo este) | Já desatualizado em 1 ponto confirmado: descreve `Issue` como "dataclass", mas a implementação é uma classe comum — sinalizar para o Writer/Reviewer corrigir ou anotar a divergência |
+
+## Como usar esta matriz
+
+Ao planejar uma mudança em `/reversa-forward`, localize o componente que será alterado na coluna esquerda e revise tanto o "impacto direto" quanto o "impacto indireto" antes de codar — nenhum teste automatizado existe para pegar regressões, então esta matriz é a principal defesa contra efeitos colaterais não previstos.
