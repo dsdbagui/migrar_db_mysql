@@ -25,7 +25,8 @@ import json
 import html
 import argparse
 import getpass
-from datetime import datetime
+import tempfile
+from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
@@ -194,7 +195,15 @@ def write_config_template(path: str) -> None:
             f"python migrate_routines.py --config {path}"
         ),
         "source": {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "", "database": ""},
-        "destination": {"host": "127.0.0.1", "port": 3307, "user": "root", "password": "", "database": ""},
+        "destination": {
+            "host": "127.0.0.1", "port": 3306, "user": "root", "password": "", "database": "",
+            "_comment_database": "se vazio, o prompt interativo sugere o mesmo nome do banco de origem",
+            "create_database_if_missing": True,
+            "_comment_create_database_if_missing": (
+                "cria o banco no destino automaticamente "
+                "(CREATE DATABASE ... CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci) se ele não existir"
+            ),
+        },
         "migrate_routines": True,
         "migrate_tables": True,
         "new_definer": None,
@@ -214,6 +223,12 @@ def write_config_template(path: str) -> None:
             "drop_existing": True,
             "filters": {},
             "_comment_filters": "cláusula WHERE por tabela, ex: {\"tabela1\": \"CodigoConsignante=139\"}",
+            "column_defaults": {},
+            "_comment_column_defaults": (
+                "valores padrão para colunas NOT NULL sem default: aplica DEFAULT no destino e "
+                "substitui NULL ao copiar dados; use 'hoje' para a data atual, ex: "
+                "{\"tabela1\": {\"coluna1\": \"hoje\"}}"
+            ),
             "apply": True,
             "view_compatibility_details": False,
             "restore_removed_fks": True,
@@ -231,7 +246,7 @@ def write_config_template(path: str) -> None:
 # ─────────────────────────────────────────────────────────────
 
 def connect(label: str, host: str, port: int, user: str, password: str, database: str,
-            charset: Optional[str] = None):
+            charset: Optional[str] = None, create_db_if_missing: bool = False):
     """Retorna conexão mysql.connector ou None."""
     kwargs = dict(host=host, port=port, user=user, password=password,
                   database=database, connection_timeout=10)
@@ -247,11 +262,40 @@ def connect(label: str, host: str, port: int, user: str, password: str, database
         if e.errno == 1115 and not charset:
             warn(f"{label}: servidor não suporta utf8mb4 (comum em MySQL 5 antigo) "
                  f"— tentando novamente com charset utf8...")
-            return connect(label, host, port, user, password, database, charset="utf8")
+            return connect(label, host, port, user, password, database, charset="utf8",
+                            create_db_if_missing=create_db_if_missing)
+        # Banco inexistente no destino — oferece criar automaticamente em vez de abortar.
+        if e.errno == 1049 and database and create_db_if_missing:
+            if cfg_confirm(
+                "destination.create_database_if_missing",
+                f"{label}: o banco '{database}' não existe. Criar agora "
+                f"(CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci)?",
+                default=True,
+            ):
+                admin_kwargs = dict(host=host, port=port, user=user, password=password,
+                                     connection_timeout=10)
+                if charset:
+                    admin_kwargs["charset"] = charset
+                try:
+                    admin_conn = mysql.connector.connect(**admin_kwargs)
+                    admin_cursor = admin_conn.cursor()
+                    admin_cursor.execute(
+                        f"CREATE DATABASE IF NOT EXISTS `{database}` "
+                        f"CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+                    )
+                    admin_conn.commit()
+                    admin_cursor.close()
+                    admin_conn.close()
+                    ok(f"Banco `{database}` criado em {label}.")
+                    return connect(label, host, port, user, password, database, charset=charset)
+                except MySQLError as e2:
+                    error(f"Falha ao criar banco `{database}` em {label}: {e2}")
+                    return None
         error(f"Falha ao conectar {label}: {e}")
         return None
 
-def ask_connection(label: str, defaults: dict, cfg_prefix: Optional[str] = None) -> tuple[Optional[object], dict]:
+def ask_connection(label: str, defaults: dict, cfg_prefix: Optional[str] = None,
+                    create_db_if_missing: bool = False) -> tuple[Optional[object], dict]:
     header(f"Conexão — {label}")
     if cfg_prefix:
         host_raw = cfg_ask(f"{cfg_prefix}.host", "Host", defaults.get("host", "127.0.0.1"))
@@ -271,9 +315,10 @@ def ask_connection(label: str, defaults: dict, cfg_prefix: Optional[str] = None)
         warn(f"Host ajustado de '{host_raw}' para '{host}' (removido protocolo/caminho de URL)")
     port = int(port_raw)
     params = {"host": host, "port": port, "user": user, "password": password, "database": database}
-    conn = connect(label, **params)
+    conn = connect(label, create_db_if_missing=create_db_if_missing, **params)
     if conn is None and confirm("Tentar novamente?"):
-        return ask_connection(label, {"host": host, "port": port, "user": user, "database": database})
+        return ask_connection(label, {"host": host, "port": port, "user": user, "database": database},
+                               create_db_if_missing=create_db_if_missing)
     return conn, params
 
 
@@ -936,10 +981,25 @@ def resolve_pending_foreign_keys(conn, database: str, pending_fks: list[dict]) -
     return results
 
 
+def _resolve_default_value(raw: str) -> str:
+    """'hoje'/'today' vira a data atual (YYYY-MM-DD); qualquer outro valor é usado literalmente."""
+    if str(raw).strip().lower() in ("hoje", "today"):
+        return date.today().isoformat()
+    return raw
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def copy_table_data(src_conn, dst_conn, src_db: str, dst_db: str,
-                    table_name: str, where_clause: Optional[str] = None) -> tuple[int, Optional[str]]:
+                    table_name: str, where_clause: Optional[str] = None,
+                    column_defaults: Optional[dict[str, str]] = None) -> tuple[int, Optional[str]]:
     """Copia dados da tabela em batches de BATCH_SIZE linhas.
     Se where_clause for informado, aplica como filtro (SELECT ... WHERE where_clause).
+    Se column_defaults for informado ({coluna: valor}), substitui NULL por esse valor nas
+    colunas indicadas antes do INSERT — necessário porque um DEFAULT na coluna do destino
+    não evita erro de NOT NULL quando o valor inserido é explicitamente NULL (modo estrito).
     Retorna (total_linhas_inseridas, erro|None)."""
     try:
         cur_src = src_conn.cursor()
@@ -954,6 +1014,24 @@ def copy_table_data(src_conn, dst_conn, src_db: str, dst_db: str,
             f"INSERT INTO `{dst_db}`.`{table_name}` ({col_list}) VALUES ({placeholders})"
         )
 
+        default_positions = [
+            (columns.index(col), val)
+            for col, val in (column_defaults or {}).items()
+            if col in columns
+        ]
+
+        def apply_defaults(batch):
+            if not default_positions:
+                return batch
+            fixed = []
+            for row in batch:
+                row = list(row)
+                for idx, val in default_positions:
+                    if row[idx] is None:
+                        row[idx] = val
+                fixed.append(tuple(row))
+            return fixed
+
         cur_dst = dst_conn.cursor()
         total = 0
 
@@ -965,7 +1043,7 @@ def copy_table_data(src_conn, dst_conn, src_db: str, dst_db: str,
                     batch = cur_src.fetchmany(BATCH_SIZE)
                     if not batch:
                         break
-                    cur_dst.executemany(insert_sql, batch)
+                    cur_dst.executemany(insert_sql, apply_defaults(batch))
                     dst_conn.commit()
                     total += len(batch)
                     prog.update(task, completed=total)
@@ -974,7 +1052,7 @@ def copy_table_data(src_conn, dst_conn, src_db: str, dst_db: str,
                 batch = cur_src.fetchmany(BATCH_SIZE)
                 if not batch:
                     break
-                cur_dst.executemany(insert_sql, batch)
+                cur_dst.executemany(insert_sql, apply_defaults(batch))
                 dst_conn.commit()
                 total += len(batch)
                 print(f"  {table_name}: {total} linhas copiadas...", end="\r")
@@ -1258,11 +1336,25 @@ document.getElementById('filter').addEventListener('input', function (e) {{
 
 
 def save_report(routine_results: list[dict], src_db: str, dst_db: str,
-                table_results: Optional[list[dict]] = None) -> Path:
-    """Salva relatório JSON + SQL."""
+                table_results: Optional[list[dict]] = None) -> Optional[Path]:
+    """Salva relatório JSON + SQL. Retorna o diretório do relatório, ou None se não foi
+    possível escrever em disco (ex: sem permissão no diretório atual) — nesse caso a
+    migração em si não é afetada, só o relatório fica indisponível."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_dir = Path(f"migration_report_{ts}")
-    report_dir.mkdir(exist_ok=True)
+    try:
+        report_dir.mkdir(exist_ok=True)
+    except OSError as e:
+        error(f"Não foi possível criar o diretório do relatório ({report_dir}): {e}")
+        fallback_dir = Path(tempfile.gettempdir()) / report_dir.name
+        try:
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            warn(f"Salvando relatório em local alternativo: {fallback_dir}")
+            report_dir = fallback_dir
+        except OSError as e2:
+            error(f"Também não foi possível escrever em {fallback_dir}: {e2}")
+            warn("Relatório não pôde ser salvo — a migração em si não foi afetada.")
+            return None
 
     table_results = table_results or []
 
@@ -1423,7 +1515,10 @@ def main():
         sys.exit(1)
 
     conn_dst, dst_params = ask_connection(
-        "DESTINO (MySQL 8)", {"host": "127.0.0.1", "port": 3307}, cfg_prefix="destination"
+        "DESTINO (MySQL 8)",
+        {"host": "127.0.0.1", "port": 3306, "database": src_params.get("database", "")},
+        cfg_prefix="destination",
+        create_db_if_missing=True,
     )
     if not conn_dst:
         error("Não foi possível conectar ao destino. Abortando.")
@@ -1665,6 +1760,36 @@ def main():
                         if where and where.strip():
                             table_filters[name] = where.strip()
 
+            # ── Valores padrão para colunas NOT NULL na cópia de dados ──
+            table_column_defaults: dict[str, dict[str, str]] = {}
+            if copy_data:
+                cfg_defaults = cfg("tables.column_defaults")
+                if cfg_defaults is not None:
+                    table_column_defaults = {
+                        t: {c: _resolve_default_value(v) for c, v in cols.items()}
+                        for t, cols in cfg_defaults.items()
+                    }
+                    if table_column_defaults:
+                        n_cols = sum(len(c) for c in table_column_defaults.values())
+                        info(f"[config] Valores padrão de coluna configurados para {n_cols} coluna(s).")
+                elif confirm(
+                    "Deseja definir valores padrão para colunas NOT NULL sem default "
+                    "(evita erro 'cannot be null' ao copiar dados)?",
+                    default=False,
+                ):
+                    for i in selected_table_idx:
+                        name = tables[i]["name"]
+                        while True:
+                            col = ask(f"Coluna com valor padrão em '{name}' (Enter = nenhuma/próxima tabela)", default="")
+                            if not col:
+                                break
+                            raw = ask(
+                                f"Valor padrão para '{name}.{col}' (digite 'hoje' para a data atual, "
+                                f"ou um valor literal)",
+                                default="hoje",
+                            )
+                            table_column_defaults.setdefault(name, {})[col] = _resolve_default_value(raw)
+
             # ── Preview de problemas ──
             header("Análise de compatibilidade — tabelas")
             table_preview: dict[str, list[Issue]] = {}
@@ -1784,13 +1909,35 @@ def main():
 
                         result["applied"] = True
 
+                    # ── Valores padrão de coluna configurados (DEFAULT real no destino) ──
+                    col_defaults = table_column_defaults.get(t["name"])
+                    if col_defaults and result["applied"]:
+                        for col_name, default_val in col_defaults.items():
+                            try:
+                                _cur = conn_dst.cursor()
+                                _cur.execute(
+                                    f"ALTER TABLE `{dst_db}`.`{t['name']}` "
+                                    f"ALTER COLUMN `{col_name}` SET DEFAULT {_sql_literal(default_val)}"
+                                )
+                                conn_dst.commit()
+                                _cur.close()
+                                result["issues"].append(Issue(
+                                    "COLUMN_DEFAULT_SET", "info",
+                                    f"DEFAULT '{default_val}' definido em `{col_name}` — evita erro de "
+                                    f"NULL em NOT NULL ao copiar dados",
+                                    f"`{col_name}` sem DEFAULT", f"DEFAULT {_sql_literal(default_val)}",
+                                ))
+                            except MySQLError as e:
+                                warn(f"Não foi possível definir DEFAULT em `{t['name']}`.`{col_name}`: {e}")
+
                     # ── Cópia de dados ──
                     if copy_data:
                         where_clause = table_filters.get(t["name"])
                         filter_msg = f" (filtro: {where_clause})" if where_clause else ""
                         info(f"  Copiando dados: {t['name']}{filter_msg}...")
                         rows_copied, copy_err = copy_table_data(
-                            conn_src, conn_dst, src_db, dst_db, t["name"], where_clause
+                            conn_src, conn_dst, src_db, dst_db, t["name"], where_clause,
+                            column_defaults=col_defaults,
                         )
                         result["rows_copied"] = rows_copied
                         result["copy_error"]  = copy_err
@@ -1883,14 +2030,15 @@ def main():
     # ── Relatório ──
     if cfg_confirm("save_report", "Salvar relatório em disco (JSON + HTML + SQL)?", default=True):
         report_dir = save_report(routine_results, src_db, dst_db, table_results)
-        ok(f"Relatório salvo em: {report_dir}/")
-        info(f"  • {report_dir}/report.html      — abra no navegador para leitura")
-        info(f"  • {report_dir}/report.json      — relatório completo")
-        info(f"  • {report_dir}/migration.sql    — DDLs corrigidos (tabelas + rotinas)")
-        if any(not r["applied"] and not r.get("skipped") for r in routine_results):
-            info(f"  • {report_dir}/retry_routines.sql — rotinas com erro")
-        if any(not r["applied"] and not r.get("skipped") for r in table_results):
-            info(f"  • {report_dir}/retry_tables.sql   — tabelas com erro")
+        if report_dir is not None:
+            ok(f"Relatório salvo em: {report_dir}/")
+            info(f"  • {report_dir}/report.html      — abra no navegador para leitura")
+            info(f"  • {report_dir}/report.json      — relatório completo")
+            info(f"  • {report_dir}/migration.sql    — DDLs corrigidos (tabelas + rotinas)")
+            if any(not r["applied"] and not r.get("skipped") for r in routine_results):
+                info(f"  • {report_dir}/retry_routines.sql — rotinas com erro")
+            if any(not r["applied"] and not r.get("skipped") for r in table_results):
+                info(f"  • {report_dir}/retry_tables.sql   — tabelas com erro")
 
     # ── DDL interativo para erros de rotinas ──
     failed = [r for r in routine_results if not r["applied"] and not r.get("skipped")]
