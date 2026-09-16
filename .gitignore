@@ -1,7 +1,11 @@
 .env
-.env.example
 migration_config*.json
 migration_report_*/
 fix_collation_*/
 __pycache__/
 *.pyc
+
+# Web app (Node.js/TypeScript)
+node_modules/
+dist/
+*.tsbuildinfo

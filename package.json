@@ -1,0 +1,28 @@
+{
+  "name": "migra-db-mysql-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Versão web (Node.js/TypeScript) da ferramenta de migração MySQL 5.x -> 8.x, sucessora de migrate_routines.py/fix_collation_stamp.py.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/server.js",
+    "migrate": "tsx --env-file=.env src/core/db/migrate.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "mysql2": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
