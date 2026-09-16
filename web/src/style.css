@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light;
+  --border: #d0d5db;
+  --bg-muted: #f5f6f8;
+  --error: #b3261e;
+  --warning: #8a5a00;
+  --info: #1a5276;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar nav a { margin-right: 1rem; color: #1a1a1a; }
+
+main#app { max-width: 780px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+
+.field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.9rem; }
+.field label { font-size: 0.85rem; font-weight: 600; }
+.field input[type="text"],
+.field input[type="password"],
+.field input[type="number"],
+.field select,
+.field textarea {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+
+.actions { display: flex; gap: 0.6rem; margin-top: 1.5rem; }
+
+button {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+button.secondary { background: #fff; color: #1a1a1a; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+th, td { border: 1px solid var(--border); padding: 0.4rem 0.5rem; text-align: left; font-size: 0.88rem; }
+th { background: var(--bg-muted); }
+
+.badge { display: inline-block; padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.72rem; margin-right: 4px; }
+.badge.error { background: #fbe6e4; color: var(--error); }
+.badge.warning { background: #fdf1d8; color: var(--warning); }
+.badge.info { background: #e2eef7; color: var(--info); }
+
+.wizard-steps { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; font-size: 0.8rem; }
+.wizard-steps span { padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--bg-muted); }
+.wizard-steps span.active { background: #1a1a1a; color: #fff; }
+
+.alert { padding: 0.6rem 0.8rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.88rem; }
+.alert.error { background: #fbe6e4; color: var(--error); }
+.alert.warning { background: #fdf1d8; color: var(--warning); }
+.alert.ok { background: #e6f4ea; color: #1e6b32; }

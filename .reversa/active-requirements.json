@@ -1,0 +1,10 @@
+{
+  "schema-version": 1,
+  "feature-dir": "_reversa_forward/001-frontend-wizard-migracao-web",
+  "feature-id": "001",
+  "short-name": "frontend-wizard-migracao-web",
+  "started-at": "2026-09-16T08:10:00Z",
+  "current-stage": "requirements",
+  "stages-completed": [],
+  "paused-features": []
+}

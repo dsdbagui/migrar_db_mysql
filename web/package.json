@@ -1,0 +1,16 @@
+{
+  "name": "migra-db-mysql-web-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wizard multi-step (BR-HUMANA-001) que consome a API REST de migra-db-mysql-web. Sem framework de UI — TypeScript + DOM direto, coerente com o apetite balanced do backend.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.10"
+  }
+}
