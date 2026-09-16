@@ -17,3 +17,7 @@ Uma execução de migração precisa deixar rastro auditável do que foi feito, 
 - ✅ `migration.sql` serve tanto como artefato de auditoria quanto como possível ponto de partida para reaplicar manualmente em outro ambiente.
 - ⚠️ Os três formatos precisam ser mantidos em sincronia manualmente (não há um único "source of truth" serializado e depois formatado em 3 saídas via templates reutilizáveis — cada função de renderização monta sua própria representação a partir do mesmo `report_data`, mas com lógica de apresentação própria).
 - ⚠️ `issues` em `report.json` perde os campos `original`/`fixed` da classe `Issue` (só mantém `code/severity/description`) — quem precisa do "antes/depois" completo de uma correção precisa ler `migration.sql`, não `report.json`.
+
+## Adendo — 2026-09-15 (commit `971bdf5`)
+
+`save_report()` deixou de propagar `PermissionError`/`OSError` sem tratamento quando o diretório de trabalho atual não é gravável (cenário real: script rodando a partir de um local somente-leitura). Agora tenta `Path(tempfile.gettempdir()) / report_dir.name` como fallback; se isso também falhar, `warn()` e retorna `None` em vez de abortar o processo — a migração já aplicada ao banco não é desfeita nem afetada, só o relatório fica indisponível. `main()` precisa checar `report_dir is not None` antes de imprimir os caminhos dos arquivos (ver `code-analysis.md`).

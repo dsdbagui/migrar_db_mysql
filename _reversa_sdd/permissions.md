@@ -1,6 +1,7 @@
 # Permissões e Papéis — migra_db_mysql
 
 > Gerado pelo Detective em 2026-09-02
+> Atualizado em 2026-09-15 pelo Reversa — reflete o commit `971bdf5`: dois novos privilégios inferidos (criação de banco no destino, `ALTER` de `DEFAULT` de coluna).
 > Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
 
 ## Contexto
@@ -41,11 +42,13 @@ O conceito de "permissão" relevante neste domínio é de dois tipos, ambos no n
 | `CREATE PROCEDURE/FUNCTION` | `CREATE ROUTINE` (e `ALTER ROUTINE`/`EXECUTE` dependendo da versão/config do MySQL) |
 | `CREATE TABLE` | `CREATE` |
 | `ALTER TABLE ... ADD UNIQUE KEY / ADD CONSTRAINT ... FOREIGN KEY / DROP FOREIGN KEY` | `ALTER`, `REFERENCES` |
+| `ALTER TABLE ... ALTER COLUMN ... SET DEFAULT` (novo em `971bdf5`, `tables.column_defaults`) | `ALTER` |
 | `INSERT INTO ...` (cópia de dados) | `INSERT` |
 | `SELECT ... information_schema.KEY_COLUMN_USAGE/REFERENTIAL_CONSTRAINTS` (busca de FKs órfãs) | `SELECT` em `information_schema` |
 | `SET FOREIGN_KEY_CHECKS=0/1` | Nenhum privilégio especial — variável de sessão |
+| `CREATE DATABASE IF NOT EXISTS ...` (novo em `971bdf5`, erro 1049 + `create_database_if_missing`) | `CREATE` **a nível de servidor** (não apenas no banco alvo — que ainda não existe no momento da criação); privilégio mais amplo que os demais desta tabela, verificado apenas na conexão administrativa separada usada para esse `CREATE DATABASE` |
 
-🔴 Nenhum desses privilégios é verificado ou documentado explicitamente no código, README ou CLAUDE.md — esta tabela é inferência a partir das instruções SQL executadas, não uma lista oficial. Não há um passo de "pré-voo" que valide privilégios antes de iniciar a migração; falhas de privilégio só aparecem durante a execução, misturadas com outros tipos de erro.
+🟢 Confirmado por leitura direta do código: nenhum desses privilégios é verificado previamente, nem documentado no README/CLAUDE.md — esta tabela é inferência a partir das instruções SQL executadas, não uma lista oficial. Não há um passo de "pré-voo" que valide privilégios antes de iniciar a migração; falhas de privilégio só aparecem durante a execução, misturadas com outros tipos de erro. (A ausência de uma verificação é, em si, um fato observável no código — não uma lacuna de conhecimento.)
 
 ## 3. `DEFINER` / `SQL SECURITY` — o "controle de acesso" das rotinas migradas
 
@@ -61,5 +64,7 @@ Diferente de RBAC de aplicação, este é o mecanismo de segurança real que a f
 
 ## Lacunas 🔴
 
-- Não há como confirmar, sem acesso a um ambiente MySQL real, se as mensagens de erro de privilégio insuficiente são reconhecidas e reportadas de forma diferenciada — pela leitura do código, elas caem no tratamento genérico de `MySQLError`.
-- Não há registro de auditoria de "quem rodou a migração" nos relatórios gerados (`report.json` não inclui usuário do SO nem usuário MySQL usado).
+Nenhuma pendente — as duas lacunas originais desta seção foram resolvidas em revisão (2026-09-15):
+
+- 🟢 Confirmado pelo operador (`questions.md#pergunta-1`): erros de privilégio insuficiente já foram observados em uso real caindo corretamente no tratamento genérico de `MySQLError` → `extract_error`/`apply_error`, sem exceção não tratada.
+- 🟢 Confirmado pelo operador (`questions.md#pergunta-9`): ausência de registro de "quem rodou a migração" em `report.json` não é relevante para o caso de uso — não vira requisito na reimplementação.

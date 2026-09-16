@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "startedAt": "2026-09-15T19:00:00Z",
+  "lastCheckpoint": "2026-09-15T21:10:00Z",
+  "completedAgents": [
+    "paradigm_advisor",
+    "curator",
+    "strategist",
+    "designer",
+    "screen_translator",
+    "inspector"
+  ],
+  "pendingAgents": [],
+  "currentAgent": {
+    "agent": null,
+    "phase": null,
+    "status": "complete",
+    "topologyApproved": true,
+    "screenModeApproved": false
+  },
+  "agentStatuses": {
+    "screen_translator": "skipped"
+  },
+  "pendingDecisions": [],
+  "artifacts": {
+    "migration_brief.md": "sha256:2375e4e0401db8642e315f7414065a6a611f58c8abc00ce54b5c2e1ff2f262e6",
+    "paradigm_decision.md": "sha256:c6699b5969ff349e247ccd657c753d3f473a2ebce863895e604a437054d065e1",
+    "target_business_rules.md": "sha256:8bd9b5bc02da47602cbab4ce358bc87ed5fb8a87d6c719a0a1a04cb001c32580",
+    "discard_log.md": "sha256:5f25f1dc0a0c4eccc5cdad8cd1e7ccede491fc82d9e66342e88316d0db6cfe44",
+    "ambiguity_log.md": "sha256:448bb7bffc35449b5f97af13d2e7870d36301f74b9b5fd3499664edbd7fd03b0",
+    "migration_strategy.md": "sha256:30f18500654e0d729d66ec63592bc4f8d11d511aceaf2cc968239f04d1d9dedd",
+    "risk_register.md": "sha256:04e47f5fbb99b64afbd6c63dc9bfe2d5be65d5693d841b6295dc151bb6bcc5fa",
+    "cutover_plan.md": "sha256:a2bb3e7c34e7985076b6847228179747adc6439a2d6a04ddc6f9de2424e5ed1c",
+    "topology_decision.md": "sha256:3cfd8fd1a13d0f1081d482cd72e33c71b0730907c116fd323fd648d3f66a3403",
+    "target_architecture.md": "sha256:e4f6a542889420119f9721c1096816ffea86526ad381f80e1fff5f55c3de0408",
+    "target_domain_model.md": "sha256:7fdeada0e19e7fe88bbe5ad17342df5354d721d1a6dc9b2079b3423464aadc36",
+    "target_data_model.md": "sha256:be3fa727fb76c9152ac03744dded63c318ed7f4da4ef7db15ec4680161700ad3",
+    "data_migration_plan.md": "sha256:c785e00467f73758a0c401709252f2f1a93c8d9309fb7894dd9649d779485329",
+    "screen_modernization_decision.md": "sha256:4f523ec07a65aded99b2e5991ad053f9ab8eb1b526f7e81a8701296b05eebecc",
+    "target_screens.md": "sha256:a058ef32bfaf353bd66e5ff6aed23a5f7af602d7991b011daa45e4d00df738ed",
+    "screen_deviation_log.md": "sha256:8fe60aa3ceb587a1c4a3b05cb0e300fbcbe1d5d8f5cc05ae3a23146c073461fd",
+    "parity_specs.md": "sha256:e315bc44af368b949447c18d174837c5ff83573cd2f5566ba9bf5e83cb153733",
+    "handoff.md": "sha256:8b4348d615f91d4538b8a96d0296d735a0df6520b06d03c951654ebe4fbbb6c4"
+  },
+  "auto": false,
+  "engine": "claude-code",
+  "reversaVersion": "1.3.3",
+  "briefPath": "_reversa_sdd/migration/migration_brief.md",
+  "expectedLegacyArtifacts": "references/expected_legacy_artifacts.yaml"
+}

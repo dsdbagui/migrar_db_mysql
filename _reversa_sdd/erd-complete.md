@@ -117,4 +117,5 @@ erDiagram
 ## Lacunas 🔴
 
 - Schema real do(s) banco(s) MySQL migrados: não documentável sem acesso a uma instância viva — delegado ao agente Data Master.
-- Não há uma "entidade Migração" formal que amarre uma execução completa (com id, data, usuário) além do `timestamp` usado no nome do diretório de relatório.
+
+🟢 Resolvido em revisão (2026-09-15, `questions.md#pergunta-9`): a ausência de uma "entidade Migração" formal com id/usuário (além do `timestamp` do diretório de relatório) foi confirmada como aceitável pelo operador — não é relevante para o caso de uso, sem necessidade de requisito novo.

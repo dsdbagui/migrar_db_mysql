@@ -1,6 +1,7 @@
 # Fluxograma — migracao-de-tabelas
 
-> `migrate_routines.py` — extração `:343`, transformações `:530-665`, aplicação/FK `:698-993`, orquestração `main() :1591-1844`
+> `migrate_routines.py` — extração `:388`, transformações `:575-716`, aplicação/FK/cópia `:747-1076`, orquestração `main() :1686-1995`
+> Atualizado em 2026-09-15 pelo Reversa — reflete o commit `971bdf5`: passo de `column_defaults` (DEFAULT real na coluna de destino) inserido antes da cópia de dados.
 
 ```mermaid
 flowchart TD
@@ -12,7 +13,8 @@ flowchart TD
     E -->|não| F[force_innodb? pergunta]
     E -->|sim| G[filtros WHERE por tabela, se copy_data]
     F --> G
-    G --> H[preview de compatibilidade: transform_table_ddl]
+    G --> G2[column_defaults: cfg tables.column_defaults ou pergunta por coluna, se copy_data]
+    G2 --> H[preview de compatibilidade: transform_table_ddl]
     H --> I{aplicar tabelas?}
     I -->|não| Z
     I -->|sim| J[SET FOREIGN_KEY_CHECKS=0]
@@ -30,9 +32,12 @@ flowchart TD
     T --> U{erro final?}
     U -->|sim| V[result.apply_error] --> K
     U -->|não| W[result.applied = true; pending_fks += fk_specs se houver]
-    N --> X
-    W --> X{copy_data?}
-    X -->|sim| Y[copy_table_data em lotes de 500, WHERE opcional]
+    N --> WD
+    W --> WD{column_defaults para esta tabela?}
+    WD -->|sim| WE[ALTER TABLE ... ALTER COLUMN ... SET DEFAULT por coluna — cada uma em try/except isolado]
+    WD -->|não| X
+    WE --> X{copy_data?}
+    X -->|sim| Y[copy_table_data em lotes de 500, WHERE opcional, NULL→default nas colunas configuradas]
     X -->|não| K
     Y --> K
     K -->|todas processadas| AA{pending_fks?}

@@ -1,6 +1,7 @@
 # Fluxograma — migracao-de-rotinas
 
-> `migrate_routines.py` — extração `:300`, transformações `:389-524`, aplicação `:672-696`, orquestração `main() :1447-1584`
+> `migrate_routines.py` — extração `:345`, transformações `:434-574`, aplicação `:717-746`, orquestração `main() :1544-1685`
+> Atualizado em 2026-09-15 pelo Reversa — apenas números de linha revalidados contra o commit `971bdf5` (fluxo de rotinas em si não foi alterado por esse commit).
 
 ```mermaid
 flowchart TD

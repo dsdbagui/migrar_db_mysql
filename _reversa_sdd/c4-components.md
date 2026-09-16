@@ -1,6 +1,7 @@
 # C4 — Nível 3: Componentes
 
 > Gerado pelo Architect em 2026-09-02 · Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
+> Atualizado em 2026-09-15 pelo Reversa — descrições de Connection Manager e Data Copier ampliadas para refletir o commit `971bdf5`.
 
 ## Componentes de `migrate_routines.py`
 
@@ -11,14 +12,14 @@ C4Component
     Container_Boundary(script, "migrate_routines.py") {
         Component(output, "Output Helpers", "info/ok/warn/error/header/ask/confirm", "Abstrai rich vs. print/input puro (HAS_RICH)")
         Component(config, "Config Resolver", "CONFIG, cfg, cfg_ask, cfg_confirm, select_items, write_config_template", "Resolve perguntas via --config com fallback interativo")
-        Component(conn, "Connection Manager", "connect, ask_connection, ensure_connected", "Conecta/reconecta origem e destino, com retry de charset e de conexão perdida")
+        Component(conn, "Connection Manager", "connect, ask_connection, ensure_connected", "Conecta/reconecta origem e destino, com retry de charset e de conexão perdida; desde 971bdf5, oferece criar o banco de destino automaticamente em erro 1049")
         Component(rext, "Routine Extractor", "fetch_routines", "Lê metadados + DDL de procedures/functions da origem")
         Component(rxform, "Routine Transformer", "remove_definer, TRANSFORMATIONS, transform_routine", "Pipeline de correção de DDL de rotinas")
         Component(rapply, "Routine Applier", "drop_if_exists, apply_routine", "Executa DDL corrigido no destino")
         Component(text, "Table Extractor", "fetch_tables", "Lê metadados + DDL de tabelas da origem")
         Component(txform, "Table Transformer", "TABLE_TRANSFORMATIONS, transform_table_ddl", "Pipeline de correção de DDL de tabelas")
         Component(fkrec, "FK Recovery Engine", "strip_foreign_keys, find_referencing_fks, drop_referencing_fks, apply_table, resolve_pending_foreign_keys", "Cria tabelas com fallback de FK e tenta restaurar depois")
-        Component(datacopy, "Data Copier", "copy_table_data", "Cópia em lotes de BATCH_SIZE=500, com filtro WHERE opcional")
+        Component(datacopy, "Data Copier", "copy_table_data, _resolve_default_value, _sql_literal", "Cópia em lotes de BATCH_SIZE=500, com filtro WHERE opcional; desde 971bdf5, substitui NULL por DEFAULT configurado (tables.column_defaults) antes do INSERT")
         Component(report, "Report Generator", "print_summary_table, print_table_summary, render_html_report, save_report", "Gera report.json/html/migration.sql/retry_*.sql")
         Component(main, "Main Orchestrator", "main()", "Fluxo interativo ponta a ponta: conecta → extrai → seleciona → transforma → aplica → relatório")
     }

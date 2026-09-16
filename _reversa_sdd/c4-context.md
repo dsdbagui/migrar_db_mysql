@@ -1,6 +1,7 @@
 # C4 — Nível 1: Contexto
 
 > Gerado pelo Architect em 2026-09-02 · Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
+> Atualizado em 2026-09-15 pelo Reversa — porta padrão do destino mudou para 3306 no commit `971bdf5` (ambas as portas são apenas defaults de prompt, configuráveis).
 
 ```mermaid
 C4Context
@@ -16,7 +17,7 @@ C4Context
 
     Rel(operador, migra_tool, "Executa via linha de comando, responde prompts interativos")
     Rel(migra_tool, mysql_origem, "Lê metadados e dados", "mysql-connector-python / TCP 3306")
-    Rel(migra_tool, mysql_destino, "Escreve DDL corrigido e dados", "mysql-connector-python / TCP 3306-3307")
+    Rel(migra_tool, mysql_destino, "Escreve DDL corrigido e dados; pode criar o banco se ausente (erro 1049)", "mysql-connector-python / TCP 3306 (default configurável)")
     Rel(migra_tool, filesystem, "Lê config/.env, escreve relatórios e logs", "I/O local")
     Rel(operador, filesystem, "Abre report.html no navegador, edita migration_config.json/.env", "file://")
 ```

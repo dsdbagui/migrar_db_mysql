@@ -1,5 +1,7 @@
 # Dicionário de Dados — migra_db_mysql
 
+> Atualizado em 2026-09-15 pelo Reversa — reflete o commit `971bdf5` (2026-09-14): `destination.port` default mudou para `3306`, nova chave `tables.column_defaults`, números de linha revalidados.
+
 > Gerado pelo Archaeologist em 2026-09-02
 > Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
 >
@@ -7,7 +9,7 @@
 
 ## Classe `Issue`
 
-`migrate_routines.py:380` — representa um problema de compatibilidade detectado (e, às vezes, corrigido) numa transformação de DDL.
+`migrate_routines.py:425` — representa um problema de compatibilidade detectado (e, às vezes, corrigido) numa transformação de DDL.
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
@@ -41,12 +43,13 @@
 | `FK_REMOVED` | warning | `strip_foreign_keys` / `drop_referencing_fks` |
 | `FK_RESTORED` | info | `resolve_pending_foreign_keys` (via `main()`) |
 | `FK_NOT_RESTORED` | warning | `resolve_pending_foreign_keys` (via `main()`) |
+| `COLUMN_DEFAULT_FAILED` 🆕 | warning | Não existe no legado (só `warn()` de terminal) — requisito novo para a reimplementação, decidido em revisão de 2026-09-15 (`questions.md#pergunta-5`, RF-10 de `migracao-de-tabelas/requirements.md`) |
 
 ---
 
 ## Rotina extraída (dict, retorno de `fetch_routines`)
 
-`migrate_routines.py:320-334`
+`migrate_routines.py:345-381`
 
 | Campo | Tipo | Obrigatório | Origem/Descrição |
 |---|---|---|---|
@@ -65,7 +68,7 @@
 
 ## Resultado de rotina (dict, `routine_results`)
 
-`migrate_routines.py:1546-1557` — um item por rotina processada em `main()`
+`migrate_routines.py:1641-1652` — um item por rotina processada em `main()`
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
@@ -84,7 +87,7 @@
 
 ## Tabela extraída (dict, retorno de `fetch_tables`)
 
-`migrate_routines.py:359-371`
+`migrate_routines.py:388-418`
 
 | Campo | Tipo | Obrigatório | Origem/Descrição |
 |---|---|---|---|
@@ -99,7 +102,7 @@
 
 ## Resultado de tabela (dict, `table_results`)
 
-`migrate_routines.py:1737-1751`
+`migrate_routines.py:1862-1876`
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
@@ -121,7 +124,7 @@
 
 ## `fk_specs` (dict — FK removida, candidata a restauração)
 
-`migrate_routines.py:632-638` (criado por `strip_foreign_keys`) e `:744-751` (criado por `find_referencing_fks`)
+`migrate_routines.py:677-683` (criado por `strip_foreign_keys`) e `:789-796` (criado por `find_referencing_fks`)
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
@@ -136,15 +139,16 @@
 
 ## `CONFIG` — schema do arquivo `--config` (JSON)
 
-`migrate_routines.py:188-224` (`write_config_template`) — schema inferido do template gerado por `--init-config`; não há validação formal (sem JSON Schema, sem Pydantic).
+`migrate_routines.py:189-247` (`write_config_template`) — schema inferido do template gerado por `--init-config`; não há validação formal (sem JSON Schema, sem Pydantic).
 
 | Chave (dotted path) | Tipo | Default no template | Descrição |
 |---|---|---|---|
 | `source.host` / `destination.host` | `str` | `"127.0.0.1"` | Host da conexão origem/destino |
-| `source.port` / `destination.port` | `int` | `3306` / `3307` | Porta |
+| `source.port` / `destination.port` | `int` | `3306` / `3306` | Porta — **destino mudou de `3307` para `3306` em `971bdf5`** |
 | `source.user` / `destination.user` | `str` | `"root"` | Usuário |
 | `source.password` / `destination.password` | `str` | `""` | Senha |
-| `source.database` / `destination.database` | `str` | `""` | Nome do banco |
+| `source.database` / `destination.database` | `str` | `""` | Nome do banco — se `destination.database` ficar vazio, o prompt interativo sugere o mesmo nome do banco de origem como default (novo em `971bdf5`) |
+| `destination.create_database_if_missing` | `bool` | `true` | **Novo em `971bdf5`** — se o banco de destino não existir (erro MySQL 1049), oferece criá-lo (`CREATE DATABASE ... CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`) em vez de abortar a conexão |
 | `migrate_routines` | `bool` | `true` | Migrar procedures/functions? |
 | `migrate_tables` | `bool` | `true` | Migrar tabelas? |
 | `new_definer` | `str \| null` | `null` | Novo DEFINER para rotinas (`null`/ausente = apenas remove) |
@@ -157,6 +161,7 @@
 | `tables.skip_create` | `bool` | `false` | Não recriar esquema — assume tabela já existe no destino |
 | `tables.force_innodb` | `bool` | `true` | Forçar `ENGINE=InnoDB` |
 | `tables.filters` | `dict[str,str]` | `{}` | Cláusula `WHERE` por nome de tabela (aplica só na cópia de dados) |
+| `tables.column_defaults` | `dict[str, dict[str,str]]` | `{}` | **Novo em `971bdf5`** — `{tabela: {coluna: valor}}`; aplica `DEFAULT` real na coluna do destino e substitui `NULL` por esse valor ao copiar dados (evita erro `NOT NULL` em modo estrito). `"hoje"`/`"today"` resolve para a data atual (`YYYY-MM-DD`); qualquer outro valor é usado como literal |
 | `tables.drop_existing` | `bool` | `true` | Dropar tabela existente no destino antes de criar |
 | `tables.apply` | `bool` | `true` | Confirma aplicação das tabelas selecionadas |
 | `tables.view_compatibility_details` | `bool` | `false` | Exibir detalhes de issues no preview |
@@ -170,7 +175,7 @@ Qualquer chave ausente do JSON volta a ser perguntada interativamente (`cfg()` r
 
 ## `report_data` — schema de `report.json`
 
-`migrate_routines.py:1270-1318` — ver também feature `relatorios-de-migracao` em `code-analysis.md`.
+`migrate_routines.py:1362-1410` — ver também feature `relatorios-de-migracao` em `code-analysis.md`. Desde `971bdf5`, `save_report()` (que constrói este dict) pode retornar `None` sem gravar nada em disco se nem o diretório de trabalho nem o temp dir do SO forem graváveis — nesse caso `report.json` simplesmente não existe.
 
 | Campo | Tipo | Descrição |
 |---|---|---|

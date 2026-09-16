@@ -2,6 +2,7 @@
 
 > Gerado pelo Detective em 2026-09-02
 > Escala de confiança: 🟢 CONFIRMADO · 🟡 INFERIDO · 🔴 LACUNA
+> Atualizado em 2026-09-15 pelo Reversa — reflete o commit `971bdf5`: novo sub-passo silencioso na transição para `DadosCopiados` (ver nota abaixo do diagrama de Tabela).
 
 Não há uma entidade de domínio persistida com campo de status explícito (não é uma aplicação com "pedidos" ou "usuários" com um campo `status`). O que existe é o **ciclo de vida implícito de um item de migração** (uma rotina ou uma tabela), observável através dos campos booleanos/opcionais dos dicts de resultado (`applied`, `skipped`, `apply_error`, etc. — ver `data-dictionary.md`). Os diagramas abaixo tornam esse ciclo de vida explícito. 🟡 Inferido da lógica de `main()`, não de uma máquina de estado formal no código (não há enum de estado nem transições nomeadas).
 
@@ -69,6 +70,8 @@ Campos que materializam cada estado:
 
 🟡 Nota: uma tabela pode terminar `applied=True` mesmo com uma FK que nunca foi restaurada — "sucesso" na migração de tabelas não implica integridade referencial completa preservada, é um trade-off deliberado (ver `domain.md`, seção "Sobre a estratégia de recuperação de FK").
 
-## Lacunas 🔴
+🟢 Novo em `971bdf5`: entre `EsquemaCriado`/`EsquemaCriadoSemFK` e `DadosCopiados` existe um sub-passo não representado como estado próprio no diagrama (não observável via `applied`/`skipped`/`apply_error` — só pela presença de issues `COLUMN_DEFAULT_SET` na lista `issues`) — se a tabela tem `tables.column_defaults` configurado, cada coluna listada recebe `ALTER TABLE ... ALTER COLUMN ... SET DEFAULT` **antes** da cópia de dados. Esse `ALTER` roda mesmo quando `EsquemaCriado` foi alcançado via `skip_create=true` (tabela pré-existente). Falha numa coluna individual (`MySQLError`) não impede a transição para `DadosCopiados` — só gera `warn()`, sem issue estruturada nem campo de erro no dict de resultado, o que é uma lacuna de observabilidade: essa falha específica não aparece em `report.json`/`report.html`, só no log do terminal 🟡.
 
-Não há uma transição de estado para "migração parcialmente aplicada e depois revertida" — se `apply_routine`/`apply_table` falha, o rollback é apenas da própria transação SQL (uma rotina ou tabela), não há rollback do lote inteiro nem de rotinas/tabelas já aplicadas anteriormente na mesma execução.
+## Observação confirmada
+
+🟢 Não existe transição de estado para "migração parcialmente aplicada e depois revertida" — se `apply_routine`/`apply_table` falha, o rollback é apenas da própria transação SQL (uma rotina ou tabela); não há rollback do lote inteiro nem de rotinas/tabelas já aplicadas anteriormente na mesma execução. Confirmado por leitura direta do código (ausência de mecanismo é diretamente observável, não é uma lacuna de conhecimento).

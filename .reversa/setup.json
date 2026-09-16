@@ -1,0 +1,24 @@
+{
+  "schema-version": 1,
+  "reversa-version": "1.3.3",
+  "installed-at": "2026-09-15T12:03:38.091Z",
+  "project-name": "migrar_db_mysql",
+  "prefix-format": "sequencial",
+  "language": "pt-BR",
+  "watch": {
+    "archive-after": 3,
+    "block-on-red": false
+  },
+  "paths": {
+    "sdd-dir": "_reversa_sdd",
+    "forward-dir": "_reversa_forward",
+    "config-dir": ".reversa"
+  },
+  "principles": {
+    "enabled": true,
+    "auto-load-into-plan": true
+  },
+  "telemetry": {
+    "enabled": false
+  }
+}
