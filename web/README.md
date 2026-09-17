@@ -13,7 +13,7 @@ cp .env.example .env   # ajuste VITE_API_URL se o backend não estiver em localh
 npm run dev
 ```
 
-O backend (`../`) precisa estar rodando (`npm run dev` na raiz do projeto) e migrado (`npm run migrate`).
+O backend (`../`) precisa estar rodando (`npm run dev` na raiz do projeto) e migrado (`npm run migrate`) — o que por sua vez exige um MySQL 8.x próprio para o App DB (perfis de conexão + histórico de jobs, **não** os bancos que você vai migrar) e uma `CREDENTIAL_VAULT_KEY` gerada localmente. Ver "Versão web" no `README.md` da raiz para o passo a passo completo de setup.
 
 ## Passo a passo de teste manual
 
