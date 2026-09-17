@@ -36,6 +36,7 @@ export async function submitJob(): Promise<SubmitResult> {
           skipCreate: state.tablesOptions.skipCreate,
           forceInnodb: state.tablesOptions.forceInnodb,
           restoreRemovedFks: state.tablesOptions.restoreRemovedFks,
+          createDatabaseIfMissing: state.tablesOptions.createDatabaseIfMissing,
           filters: Object.keys(state.tablesOptions.filters).length ? state.tablesOptions.filters : undefined,
           columnDefaults: Object.keys(state.tablesOptions.columnDefaults).length
             ? state.tablesOptions.columnDefaults

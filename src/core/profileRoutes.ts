@@ -42,7 +42,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   });
 
   app.delete<{ Params: { id: string } }>("/connection-profiles/:id", async (request, reply) => {
-    await deleteProfile(request.params.id);
+    try {
+      await deleteProfile(request.params.id);
+    } catch (err) {
+      if ((err as { code?: string })?.code === "ER_ROW_IS_REFERENCED_2") {
+        return reply.code(409).send({ error: "perfil em uso por uma migração já registrada" });
+      }
+      throw err;
+    }
     return reply.code(204).send();
   });
 }

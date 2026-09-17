@@ -18,7 +18,7 @@ export function friendlyError(status: number, context: ErrorContext, rawMessage?
   }
 
   if (context === "profile-delete") {
-    if (status === 400 || status === 409) {
+    if (status === 409) {
       return "Este perfil está em uso por uma migração já registrada e não pode ser excluído.";
     }
     if (status === 404) return "Perfil não encontrado — a lista pode estar desatualizada, atualize a página.";

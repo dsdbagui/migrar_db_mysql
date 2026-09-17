@@ -1,5 +1,10 @@
 import { makeIssue } from "../../core/issue.js";
-import { connect, ensureConnected, type ConnectionParams } from "../../core/connectionManager.js";
+import {
+  connect,
+  connectWithAutoCreateDatabase,
+  ensureConnected,
+  type ConnectionParams,
+} from "../../core/connectionManager.js";
 import {
   getPendingFkSpecs,
   applyFkResolutionOutcome,
@@ -30,6 +35,7 @@ export interface TablesJobParams {
   filters?: Record<string, string>;
   columnDefaults?: Record<string, Record<string, string>>;
   restoreRemovedFks: boolean;
+  createDatabaseIfMissing: boolean;
 }
 
 function selectTables(tables: ExtractedTable[], select: "all" | string[]): ExtractedTable[] {
@@ -62,7 +68,7 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
   if (!ctx.sourceParams) throw new Error("Feature 'tables' requer conexão de origem");
 
   let srcConn = await connect("ORIGEM", ctx.sourceParams);
-  let dstConn = await connect("DESTINO", ctx.targetParams);
+  let dstConn = await connectWithAutoCreateDatabase("DESTINO", ctx.targetParams, params.createDatabaseIfMissing);
   const srcDb = ctx.sourceParams.database ?? "";
   const dstDb = ctx.targetParams.database ?? "";
 

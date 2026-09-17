@@ -31,6 +31,7 @@ export function registerTablesRoutes(app: FastifyInstance): void {
         filters: body.filters,
         columnDefaults: body.columnDefaults,
         restoreRemovedFks: body.restoreRemovedFks,
+        createDatabaseIfMissing: body.createDatabaseIfMissing,
       } satisfies TablesJobParams,
       sourceProfileId: body.sourceProfileId,
       targetProfileId: body.targetProfileId,

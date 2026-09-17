@@ -42,6 +42,7 @@ export function renderStep3(container: HTMLElement): void {
           skipCreate: data.get("skipCreate") === "on",
           forceInnodb: data.get("forceInnodb") === "on",
           restoreRemovedFks: data.get("restoreRemovedFks") === "on",
+          createDatabaseIfMissing: data.get("createDatabaseIfMissing") === "on",
           filters: parseKeyValueRows(form, "filter"),
           columnDefaults: parseColumnDefaultRows(form),
         },
@@ -69,6 +70,7 @@ function tablesFields(opts: {
   skipCreate: boolean;
   forceInnodb: boolean;
   restoreRemovedFks: boolean;
+  createDatabaseIfMissing: boolean;
   filters: Record<string, string>;
   columnDefaults: Record<string, Record<string, string>>;
 }): string {
@@ -82,6 +84,7 @@ function tablesFields(opts: {
     <div class="checkbox-row"><input type="checkbox" name="skipCreate" ${opts.skipCreate ? "checked" : ""} /><label>Pular DROP/CREATE (tabelas já existem no destino)</label></div>
     <div class="checkbox-row"><input type="checkbox" name="forceInnodb" ${opts.forceInnodb ? "checked" : ""} /><label>Forçar ENGINE=InnoDB</label></div>
     <div class="checkbox-row"><input type="checkbox" name="restoreRemovedFks" ${opts.restoreRemovedFks ? "checked" : ""} /><label>Tentar restaurar foreign keys removidas na recuperação (BR-MIGRAR-006)</label></div>
+    <div class="checkbox-row"><input type="checkbox" name="createDatabaseIfMissing" ${opts.createDatabaseIfMissing ? "checked" : ""} /><label>Criar banco de destino automaticamente, se não existir</label></div>
 
     <h2>Filtros WHERE por tabela (opcional)</h2>
     <div id="filter-rows">

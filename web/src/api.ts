@@ -20,7 +20,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: init?.body ? { "Content-Type": "application/json", ...(init?.headers ?? {}) } : init?.headers,
     });
   } catch {
     // Falha de rede (backend fora do ar, DNS, etc.) — tratada pelo chamador via friendlyError.
@@ -103,6 +103,7 @@ export interface TablesJobParams {
   filters?: Record<string, string>;
   columnDefaults?: Record<string, Record<string, string>>;
   restoreRemovedFks: boolean;
+  createDatabaseIfMissing: boolean;
 }
 
 export const api = {

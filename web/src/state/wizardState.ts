@@ -19,6 +19,7 @@ export interface TablesOptions {
   skipCreate: boolean;
   forceInnodb: boolean;
   restoreRemovedFks: boolean;
+  createDatabaseIfMissing: boolean;
   filters: Record<string, string>;
   columnDefaults: Record<string, Record<string, string>>;
 }
@@ -48,6 +49,7 @@ function initialState(): WizardState {
       skipCreate: false,
       forceInnodb: false,
       restoreRemovedFks: true,
+      createDatabaseIfMissing: false,
       filters: {},
       columnDefaults: {},
     },
