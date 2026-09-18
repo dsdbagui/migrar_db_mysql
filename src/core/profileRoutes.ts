@@ -22,7 +22,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const body = request.body;
     const profile = await createProfile({
       label: body.label,
-      host: body.host,
+      host: body.host.trim(),
       port: body.port ?? 3306,
       user: body.user,
       password: body.password,
