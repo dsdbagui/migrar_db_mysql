@@ -57,9 +57,27 @@ export function renderStep4(container: HTMLElement): void {
       return;
     }
 
+    warnAboutMissingNames(currentState.select, res.data.items);
     recordPreview(res.data.items);
     renderPreviewItems(res.data.items);
     confirmBtn.disabled = false;
+  }
+
+  /**
+   * O backend simplesmente omite do preview qualquer nome selecionado que não exista
+   * mais na origem (não sinaliza isso de forma alguma) — descoberto testando o fluxo
+   * ponta a ponta desta feature. RF-03/BR-MIGRAR-012 exige que isso seja um aviso não
+   * bloqueante, então a comparação é feita aqui, no cliente.
+   */
+  function warnAboutMissingNames(select: "all" | string[], items: PreviewItem[]): void {
+    if (select === "all") return;
+    const returnedNames = new Set(items.map((i) => i.name));
+    const missing = select.filter((name) => !returnedNames.has(name));
+    if (missing.length > 0) {
+      alertBox.innerHTML = `<div class="alert warning">Não encontrado(s) na origem, ignorado(s) nesta migração: ${missing
+        .map((n) => `<code>${n}</code>`)
+        .join(", ")}</div>`;
+    }
   }
 
   function renderPreviewItems(items: PreviewItem[]): void {
