@@ -79,6 +79,10 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
     const selected = selectTables(tables, params.select).filter((t) => !ctx.alreadyProcessed.has(t.name));
 
     for (const table of selected) {
+      // Cancelamento cooperativo (_reversa_forward/003-cancelamento-de-job, RN-03): checa entre
+      // itens, não interrompe uma query já em execução.
+      if (await ctx.isCancelled()) break;
+
       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
       dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
 
@@ -160,7 +164,10 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
       await ctx.onItem(item);
     }
 
-    if (params.restoreRemovedFks) {
+    // D-06 (_reversa_forward/003-cancelamento-de-job/roadmap.md): job cancelado não faz mais
+    // trabalho além de parar — pula a restauração de FKs pendentes. FOREIGN_KEY_CHECKS=1 continua
+    // rodando sempre logo abaixo, cancelado ou não, para nunca deixar o destino num estado inseguro.
+    if (params.restoreRemovedFks && !(await ctx.isCancelled())) {
       const pending = await getPendingFkSpecs(ctx.jobId);
       if (pending.length > 0) {
         const outcomes = await resolvePendingForeignKeys(

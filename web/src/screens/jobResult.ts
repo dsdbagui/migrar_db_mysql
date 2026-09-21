@@ -20,14 +20,24 @@ export async function renderJobResult(container: HTMLElement, params: { feature:
   renderResult(container, jobId, res.data);
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function renderResult(container: HTMLElement, jobId: string, data: JobStatusResponse): void {
   const applied = data.items.filter((i) => i.applied);
   const failed = data.items.filter((i) => i.applyError != null);
   const skipped = data.items.filter((i) => i.skipped);
 
+  const errorHtml =
+    data.status === "failed" && data.errorMessage
+      ? `<div class="alert error">Falha: ${escapeHtml(data.errorMessage)}</div>`
+      : "";
+
   container.innerHTML = `
     <h1>Resultado da migração</h1>
     <p>Job <code>${jobId}</code> — status final: <strong>${data.status}</strong></p>
+    ${errorHtml}
     <p>${applied.length} aplicado(s), ${failed.length} com erro (falha isolada, BR-MIGRAR-003), ${skipped.length} pulado(s)</p>
 
     <table>

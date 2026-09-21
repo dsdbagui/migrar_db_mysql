@@ -6,6 +6,7 @@ import { renderStep3 } from "./screens/wizard/step3.js";
 import { renderStep4 } from "./screens/wizard/step4Preview.js";
 import { renderJobStatus } from "./screens/jobStatus.js";
 import { renderJobResult } from "./screens/jobResult.js";
+import { renderJobHistory } from "./screens/jobHistory.js";
 
 const app = document.getElementById("app")!;
 
@@ -14,6 +15,7 @@ addRoute("/wizard/step1", () => renderStep1(app));
 addRoute("/wizard/step2", () => renderStep2(app));
 addRoute("/wizard/step3", () => renderStep3(app));
 addRoute("/wizard/step4", () => renderStep4(app));
+addRoute("/jobs", () => renderJobHistory(app));
 addRoute("/jobs/:feature/:id", (params) => renderJobStatus(app, { feature: params.feature!, id: params.id! }));
 addRoute("/jobs/:feature/:id/result", (params) => renderJobResult(app, { feature: params.feature!, id: params.id! }));
 

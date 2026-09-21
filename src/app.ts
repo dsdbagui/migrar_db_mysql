@@ -4,6 +4,7 @@ import { registerProfileRoutes } from "./core/profileRoutes.js";
 import { registerRoutinesRoutes } from "./features/routines/routes.js";
 import { registerTablesRoutes } from "./features/tables/routes.js";
 import { registerReportsRoutes } from "./features/reports/routes.js";
+import { registerJobRoutes } from "./features/jobs/routes.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -19,6 +20,7 @@ export function buildApp(): FastifyInstance {
   registerRoutinesRoutes(app);
   registerTablesRoutes(app);
   registerReportsRoutes(app);
+  registerJobRoutes(app);
 
   return app;
 }

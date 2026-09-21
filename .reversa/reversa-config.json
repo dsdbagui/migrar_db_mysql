@@ -5,6 +5,12 @@
     "src/features/reports/**",
     "src/app.ts",
     "tests/features/reports/**",
-    "web/**"
+    "web/**",
+    "src/core/**",
+    "tests/core/**",
+    "src/features/jobs/**",
+    "tests/features/jobs/**",
+    "src/features/routines/**",
+    "src/features/tables/**"
   ]
 }

@@ -85,7 +85,26 @@ export interface JobStatusResponse {
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
   startedAt: string | null;
   finishedAt: string | null;
+  errorMessage: string | null;
   items: JobItem[];
+}
+
+export interface JobListItem {
+  id: string;
+  feature: Feature | "config" | "reports" | "collation_fix";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdBy: string;
+  errorMessage: string | null;
+  sourceProfileLabel: string | null;
+  targetProfileLabel: string | null;
+  createdAt: string;
+}
+
+export interface ListJobsFilters {
+  feature?: JobListItem["feature"];
+  status?: JobListItem["status"];
 }
 
 export interface RoutinesJobParams {
@@ -133,6 +152,17 @@ export const api = {
     request<{ id: string }>("/tables/jobs", { method: "POST", body: JSON.stringify(body) }),
 
   getJobStatus: (feature: Feature, id: string) => request<JobStatusResponse>(`/${feature}/jobs/${id}`),
+
+  listJobs: (filters?: ListJobsFilters) => {
+    const query = new URLSearchParams();
+    if (filters?.feature) query.set("feature", filters.feature);
+    if (filters?.status) query.set("status", filters.status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<JobListItem[]>(`/jobs${suffix}`);
+  },
+
+  cancelJob: (jobId: string) =>
+    request<{ id: string; status: "cancelled" }>(`/jobs/${jobId}/cancel`, { method: "POST" }),
 
   generateReport: (jobId: string) =>
     request<{ jobId: string; generatedAt: string }>(`/jobs/${jobId}/report`, { method: "POST" }),

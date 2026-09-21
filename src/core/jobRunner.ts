@@ -54,6 +54,13 @@ export interface FeatureRunContext {
   alreadyProcessed: Set<string>;
   /** Chamar assim que cada item terminar de ser processado — persiste incrementalmente. */
   onItem: (item: JobItemResult) => Promise<void>;
+  /**
+   * _reversa_forward/003-cancelamento-de-job (D-01): consulta se um POST /jobs/:id/cancel
+   * já marcou este job como cancelled. Cada FeatureRunner deve checar entre itens do seu
+   * loop e parar (sem lançar erro) quando retornar true — cancelamento cooperativo, não
+   * interrompe uma query já em execução (RN-03).
+   */
+  isCancelled: () => Promise<boolean>;
 }
 
 export type FeatureRunner = (ctx: FeatureRunContext) => Promise<void>;
@@ -214,6 +221,11 @@ export async function runJob(jobId: string, runner: FeatureRunner): Promise<void
   const targetParams = await resolveForConnection(job.target_profile_id);
   const sourceParams = job.source_profile_id ? await resolveForConnection(job.source_profile_id) : undefined;
 
+  const isCancelled = async (): Promise<boolean> => {
+    const [statusRows] = await db.query<any[]>("SELECT status FROM migration_jobs WHERE id = ?", [jobId]);
+    return (statusRows as any[])[0]?.status === "cancelled";
+  };
+
   try {
     await runner({
       jobId,
@@ -223,12 +235,28 @@ export async function runJob(jobId: string, runner: FeatureRunner): Promise<void
       targetParams,
       alreadyProcessed,
       onItem: (item) => persistItem(jobId, item),
+      isCancelled,
     });
-    await db.query(`UPDATE migration_jobs SET status = 'completed', finished_at = NOW() WHERE id = ?`, [jobId]);
+    // D-02 (_reversa_forward/003-cancelamento-de-job/roadmap.md): "AND status = 'running'" evita
+    // sobrescrever um job que foi cancelado (POST /jobs/:id/cancel) enquanto runner() ainda estava
+    // em voo — sem essa guarda, esse UPDATE reverteria 'cancelled' de volta para 'completed'.
+    await db.query(
+      `UPDATE migration_jobs SET status = 'completed', finished_at = NOW() WHERE id = ? AND status = 'running'`,
+      [jobId],
+    );
     logger.ok(`Job ${jobId} concluído`);
   } catch (err) {
-    await db.query(`UPDATE migration_jobs SET status = 'failed', finished_at = NOW() WHERE id = ?`, [jobId]);
-    logger.error(`Job ${jobId} falhou`, { error: String(err) });
+    // D-03 (_reversa_forward/002-timeout-conexao-job/roadmap.md): antes desta feature não havia
+    // onde persistir o motivo da falha — migration_jobs não tinha coluna de erro, e o logger só
+    // escreve em stdout. Sem isso, "failed" era visível mas nunca explicado.
+    // D-02 (_reversa_forward/003-cancelamento-de-job): mesma guarda "AND status = 'running'" do
+    // caminho de sucesso acima, pelo mesmo motivo.
+    const message = err instanceof Error ? err.message : String(err);
+    await db.query(
+      `UPDATE migration_jobs SET status = 'failed', finished_at = NOW(), error_message = ? WHERE id = ? AND status = 'running'`,
+      [message, jobId],
+    );
+    logger.error(`Job ${jobId} falhou`, { error: message });
     throw err;
   }
 }
@@ -239,6 +267,7 @@ export async function getJobStatus(jobId: string): Promise<{
   status: JobStatus;
   startedAt: Date | null;
   finishedAt: Date | null;
+  errorMessage: string | null;
   items: Array<{
     itemType: JobItemType;
     name: string;
@@ -265,6 +294,7 @@ export async function getJobStatus(jobId: string): Promise<{
     status: job.status,
     startedAt: job.started_at,
     finishedAt: job.finished_at,
+    errorMessage: job.error_message ?? null,
     items: (itemRows as any[]).map((r) => ({
       itemType: r.item_type,
       name: r.name,

@@ -74,7 +74,23 @@ export function renderJobStatus(container: HTMLElement, params: { feature: strin
   }
 
   function renderStatus(data: JobStatusResponse): void {
-    statusBox.innerHTML = `<p>Status: <strong>${statusLabel(data.status)}</strong></p>`;
+    const errorHtml =
+      data.status === "failed" && data.errorMessage
+        ? `<div class="alert error">Falha: ${escapeHtml(data.errorMessage)}</div>`
+        : "";
+    // Cancelamento (_reversa_forward/003-cancelamento-de-job, RF-05): visível só enquanto
+    // pending/running — some assim que o job atinge status terminal.
+    const cancelHtml = TERMINAL_STATUSES.has(data.status)
+      ? ""
+      : `<p><button id="cancel-job-btn" class="secondary">Cancelar</button></p>`;
+    statusBox.innerHTML = `<p>Status: <strong>${statusLabel(data.status)}</strong></p>${errorHtml}${cancelHtml}`;
+
+    if (!TERMINAL_STATUSES.has(data.status)) {
+      container.querySelector<HTMLButtonElement>("#cancel-job-btn")!.addEventListener("click", () => {
+        void handleCancel();
+      });
+    }
+
     itemsBox.innerHTML = `
       <table>
         <thead><tr><th>Item</th><th>Tipo</th><th>Situação</th></tr></thead>
@@ -93,7 +109,23 @@ export function renderJobStatus(container: HTMLElement, params: { feature: strin
     `;
   }
 
+  async function handleCancel(): Promise<void> {
+    if (!confirm("Tem certeza que deseja cancelar este job?")) return;
+
+    const res = await api.cancelJob(jobId);
+    if (!res.ok) {
+      alertBox.innerHTML = `<div class="alert error">${friendlyError(res.status, "job")}</div>`;
+      return;
+    }
+    // Não força o estado local aqui — deixa o próximo ciclo de poll (já agendado) trazer o
+    // status "cancelled" persistido, mesma fonte de verdade que o resto da tela usa.
+  }
+
   void poll();
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function statusLabel(status: JobStatusResponse["status"]): string {

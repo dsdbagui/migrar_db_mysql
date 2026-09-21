@@ -1,0 +1,15 @@
+{"ts":"2026-09-21T02:00:00Z","action":"T001","status":"done","files":["src/features/jobs/routes.ts"]}
+{"ts":"2026-09-21T02:05:00Z","action":"T002","status":"done","files":["tests/core/jobRunner.test.ts"]}
+{"ts":"2026-09-21T02:10:00Z","action":"T003","status":"done","files":["tests/features/jobs/routes.test.ts"]}
+{"ts":"2026-09-21T02:15:00Z","action":"test-fix","status":"done","note":"Corrigido bug no mock de tests/core/jobRunner.test.ts: a guarda status='running' estava sendo aplicada incondicionalmente pelo mock, mascarando a ausência do fix real (D-02). Corrigido para inspecionar a SQL real."}
+{"ts":"2026-09-21T02:20:00Z","action":"T004","status":"done","files":["src/core/jobRunner.ts"]}
+{"ts":"2026-09-21T02:22:00Z","action":"T005","status":"done","files":["src/core/jobRunner.ts"]}
+{"ts":"2026-09-21T02:25:00Z","action":"T006","status":"done","files":["src/features/jobs/routes.ts"]}
+{"ts":"2026-09-21T02:27:00Z","action":"T007","status":"done","files":["src/features/routines/service.ts"]}
+{"ts":"2026-09-21T02:29:00Z","action":"T008","status":"done","files":["src/features/tables/service.ts"]}
+{"ts":"2026-09-21T02:30:00Z","action":"verify","status":"done","note":"npx tsc --noEmit: sem erros. npx vitest run: 8 arquivos, 63 testes, 57 verdes, 6 vermelhos esperados (tests/features/jobs/routes.test.ts, aguardando T009 registrar a rota em app.ts)."}
+{"ts":"2026-09-21T02:32:00Z","action":"T009","status":"done","files":["src/app.ts"]}
+{"ts":"2026-09-21T02:33:00Z","action":"verify","status":"done","note":"npx vitest run tests/features/jobs/: 7/7 verdes após registrar a rota."}
+{"ts":"2026-09-21T02:35:00Z","action":"T010","status":"done","files":["web/src/api.ts"]}
+{"ts":"2026-09-21T02:38:00Z","action":"T011","status":"done","files":["web/src/screens/jobStatus.ts"]}
+{"ts":"2026-09-21T02:39:00Z","action":"verify","status":"done","note":"web: npx tsc -p tsconfig.json --noEmit sem erros."}

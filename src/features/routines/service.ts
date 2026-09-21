@@ -53,6 +53,10 @@ export async function runRoutinesJob(ctx: FeatureRunContext): Promise<void> {
     const selected = selectRoutines(routines, params.select).filter((r) => !ctx.alreadyProcessed.has(r.name));
 
     for (const routine of selected) {
+      // Cancelamento cooperativo (_reversa_forward/003-cancelamento-de-job, RN-03): checa entre
+      // itens, não interrompe uma query já em execução.
+      if (await ctx.isCancelled()) break;
+
       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
       dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
 
