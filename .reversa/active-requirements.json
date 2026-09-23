@@ -1,9 +1,9 @@
 {
   "schema-version": 1,
-  "feature-dir": "_reversa_forward/005-perfil-conexao-por-usuario",
-  "feature-id": "005",
-  "short-name": "perfil-conexao-por-usuario",
-  "started-at": "2026-09-22T13:33:05Z",
+  "feature-dir": "_reversa_forward/006-redefinicao-de-senha",
+  "feature-id": "006",
+  "short-name": "redefinicao-de-senha",
+  "started-at": "2026-09-23T14:20:33Z",
   "current-stage": "requirements",
   "stages-completed": [],
   "paused-features": []

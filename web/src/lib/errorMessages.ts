@@ -4,7 +4,15 @@
  * usada junto de um log de console para depuração.
  */
 
-export type ErrorContext = "profile-delete" | "profile-create" | "report" | "job" | "generic";
+export type ErrorContext =
+  | "profile-delete"
+  | "profile-create"
+  | "report"
+  | "job"
+  | "login"
+  | "password-change"
+  | "user-create"
+  | "generic";
 
 export function friendlyError(status: number, context: ErrorContext, rawMessage?: string): string {
   if (status === 0) {
@@ -24,7 +32,25 @@ export function friendlyError(status: number, context: ErrorContext, rawMessage?
     if (status === 404) return "Perfil não encontrado — a lista pode estar desatualizada, atualize a página.";
   }
 
+  if (context === "login") {
+    // Mesma mensagem para usuário inexistente e senha errada (RF-03 da feature 005).
+    if (status === 401) return "Usuário ou senha inválidos.";
+    if (status === 400) return "Informe usuário e senha.";
+  }
+
+  // _reversa_forward/006-redefinicao-de-senha: 403 (não 401) é senha atual errada — a sessão continua.
+  if (context === "password-change") {
+    if (status === 403) return "Senha atual incorreta.";
+    if (status === 400) return rawMessage ? capitalize(rawMessage) + "." : "Senha nova inválida.";
+  }
+
+  if (context === "user-create") {
+    if (status === 409) return "Esse nome de usuário já está cadastrado.";
+    if (status === 400) return rawMessage ? capitalize(rawMessage) + "." : "Dados do usuário inválidos.";
+  }
+
   if (context === "profile-create") {
+    if (status === 409) return "Você já tem um perfil com esse rótulo.";
     if (status === 400) return "Dados do perfil inválidos. Confira host, porta, usuário e senha.";
   }
 
@@ -37,4 +63,8 @@ export function friendlyError(status: number, context: ErrorContext, rawMessage?
   }
 
   return rawMessage ?? "Ocorreu um erro inesperado.";
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

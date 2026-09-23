@@ -87,6 +87,16 @@ vi.mock("../../../src/core/db/appDb.js", () => ({
   }),
 }));
 
+// _reversa_forward/005-perfil-conexao-por-usuario (D-08): toda rota passou a exigir sessão —
+// sessão simulada no limite de sessionStore, e todo inject carrega o cookie via AUTH.
+vi.mock("../../../src/core/sessionStore.js", () => ({
+  SESSION_TTL_SECONDS: 7200,
+  createSession: vi.fn(),
+  getSession: async (id: string) => (id === "tok-teste" ? { userId: "u-teste", username: "operador" } : null),
+  deleteSession: vi.fn(),
+}));
+const AUTH = { session: "tok-teste" };
+
 const { buildApp } = await import("../../../src/app.js");
 
 beforeEach(() => {
@@ -96,14 +106,14 @@ beforeEach(() => {
 describe("POST /jobs/:id/cancel", () => {
   it("retorna 404 para job inexistente", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "POST", url: "/jobs/inexistente/cancel" });
+    const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/inexistente/cancel" });
     expect(res.statusCode).toBe(404);
   });
 
   it("cancela (200) um job pending", async () => {
     jobs.set("job-pending", { id: "job-pending", status: "pending" });
     const app = buildApp();
-    const res = await app.inject({ method: "POST", url: "/jobs/job-pending/cancel" });
+    const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-pending/cancel" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ id: "job-pending", status: "cancelled" });
     expect(jobs.get("job-pending")!.status).toBe("cancelled");
@@ -112,7 +122,7 @@ describe("POST /jobs/:id/cancel", () => {
   it("cancela (200) um job running", async () => {
     jobs.set("job-running", { id: "job-running", status: "running" });
     const app = buildApp();
-    const res = await app.inject({ method: "POST", url: "/jobs/job-running/cancel" });
+    const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-running/cancel" });
     expect(res.statusCode).toBe(200);
     expect(jobs.get("job-running")!.status).toBe("cancelled");
   });
@@ -122,7 +132,7 @@ describe("POST /jobs/:id/cancel", () => {
     async (status) => {
       jobs.set("job-terminal", { id: "job-terminal", status });
       const app = buildApp();
-      const res = await app.inject({ method: "POST", url: "/jobs/job-terminal/cancel" });
+      const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-terminal/cancel" });
       expect(res.statusCode).toBe(409);
       expect(jobs.get("job-terminal")!.status).toBe(status);
     },
@@ -132,10 +142,10 @@ describe("POST /jobs/:id/cancel", () => {
     jobs.set("job-1", { id: "job-1", status: "running" });
     const app = buildApp();
 
-    const first = await app.inject({ method: "POST", url: "/jobs/job-1/cancel" });
+    const first = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-1/cancel" });
     expect(first.statusCode).toBe(200);
 
-    const second = await app.inject({ method: "POST", url: "/jobs/job-1/cancel" });
+    const second = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-1/cancel" });
     expect(second.statusCode).toBe(409);
   });
 });
@@ -143,7 +153,7 @@ describe("POST /jobs/:id/cancel", () => {
 describe("GET /jobs", () => {
   it("retorna array vazio (200) quando não há jobs", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
   });
@@ -170,7 +180,7 @@ describe("GET /jobs", () => {
     });
 
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs" });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.map((j: any) => j.id)).toEqual(["job-new", "job-old"]);
@@ -193,7 +203,7 @@ describe("GET /jobs", () => {
     });
 
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs" });
     const body = res.json();
     expect(body).toHaveLength(1);
     expect(body[0]).toMatchObject({ sourceProfileLabel: null, targetProfileLabel: "Homologação MySQL 8.0" });
@@ -209,7 +219,7 @@ describe("GET /jobs", () => {
       });
     }
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs" });
     expect(res.json()).toHaveLength(50);
   });
 
@@ -224,20 +234,20 @@ describe("GET /jobs", () => {
     });
 
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs?feature=tables&status=completed" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs?feature=tables&status=completed" });
     expect(res.statusCode).toBe(200);
     expect(res.json().map((j: any) => j.id)).toEqual(["job-a"]);
   });
 
   it("retorna 400 para valor de feature fora do enum aceito", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs?feature=nao-existe" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs?feature=nao-existe" });
     expect(res.statusCode).toBe(400);
   });
 
   it("retorna 400 para valor de status fora do enum aceito", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs?status=nao-existe" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs?status=nao-existe" });
     expect(res.statusCode).toBe(400);
   });
 });

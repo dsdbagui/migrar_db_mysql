@@ -14,6 +14,8 @@ interface FakeJob {
   params_json: Record<string, unknown>;
   source_profile_id: string | null;
   target_profile_id: string | null;
+  source_database?: string | null;
+  target_database?: string;
 }
 
 interface FakeItem {
@@ -30,7 +32,6 @@ interface FakeItem {
 }
 
 const jobs = new Map<string, FakeJob>();
-const profiles = new Map<string, { database_name: string | null }>();
 const itemsByJob = new Map<string, FakeItem[]>();
 const reportsByJob = new Map<
   string,
@@ -39,7 +40,6 @@ const reportsByJob = new Map<
 
 function reset(): void {
   jobs.clear();
-  profiles.clear();
   itemsByJob.clear();
   reportsByJob.clear();
 }
@@ -54,11 +54,12 @@ vi.mock("../../../src/core/db/appDb.js", () => ({
         return [job ? [{ status: job.status }] : []];
       }
 
-      if (sql.includes("FROM migration_jobs j") && sql.includes("LEFT JOIN connection_profiles")) {
+      // _reversa_forward/005-perfil-conexao-por-usuario: o banco vem das colunas do job, não mais
+      // de connection_profiles.database_name (removida em 005_*.sql).
+      if (sql.includes("FROM migration_jobs j") && sql.includes("WHERE j.id = ?")) {
+        if (sql.includes("database_name")) throw new Error("connection_profiles.database_name não existe mais");
         const job = jobs.get(p[0]);
         if (!job) return [[]];
-        const src = job.source_profile_id ? profiles.get(job.source_profile_id) : undefined;
-        const dst = job.target_profile_id ? profiles.get(job.target_profile_id) : undefined;
         return [
           [
             {
@@ -66,8 +67,8 @@ vi.mock("../../../src/core/db/appDb.js", () => ({
               feature: job.feature,
               status: job.status,
               params_json: job.params_json,
-              source_db: src?.database_name ?? null,
-              destination_db: dst?.database_name ?? null,
+              source_db: job.source_database ?? null,
+              destination_db: job.target_database ? job.target_database : null,
             },
           ],
         ];
@@ -113,6 +114,16 @@ vi.mock("../../../src/core/db/appDb.js", () => ({
   }),
 }));
 
+// _reversa_forward/005-perfil-conexao-por-usuario (D-08): toda rota passou a exigir sessão —
+// sessão simulada no limite de sessionStore, e todo inject carrega o cookie via AUTH.
+vi.mock("../../../src/core/sessionStore.js", () => ({
+  SESSION_TTL_SECONDS: 7200,
+  createSession: vi.fn(),
+  getSession: async (id: string) => (id === "tok-teste" ? { userId: "u-teste", username: "operador" } : null),
+  deleteSession: vi.fn(),
+}));
+const AUTH = { session: "tok-teste" };
+
 const { buildApp } = await import("../../../src/app.js");
 
 beforeEach(() => {
@@ -122,7 +133,7 @@ beforeEach(() => {
 describe("POST /jobs/:id/report", () => {
   it("retorna 404 para job inexistente", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "POST", url: "/jobs/inexistente/report" });
+    const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/inexistente/report" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -136,7 +147,7 @@ describe("POST /jobs/:id/report", () => {
       target_profile_id: null,
     });
     const app = buildApp();
-    const res = await app.inject({ method: "POST", url: "/jobs/job-running/report" });
+    const res = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-running/report" });
     expect(res.statusCode).toBe(409);
   });
 
@@ -165,10 +176,10 @@ describe("POST /jobs/:id/report", () => {
     ]);
 
     const app = buildApp();
-    const first = await app.inject({ method: "POST", url: "/jobs/job-ok/report" });
+    const first = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-ok/report" });
     expect(first.statusCode).toBe(201);
 
-    const second = await app.inject({ method: "POST", url: "/jobs/job-ok/report" });
+    const second = await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-ok/report" });
     expect(second.statusCode).toBe(200);
   });
 });
@@ -176,13 +187,13 @@ describe("POST /jobs/:id/report", () => {
 describe("GET /jobs/:id/report", () => {
   it("retorna 400 para format inválido", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs/job-ok/report?format=xml" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-ok/report?format=xml" });
     expect(res.statusCode).toBe(400);
   });
 
   it("retorna 404 para job inexistente", async () => {
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs/inexistente/report" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/inexistente/report" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -196,7 +207,7 @@ describe("GET /jobs/:id/report", () => {
       target_profile_id: null,
     });
     const app = buildApp();
-    const res = await app.inject({ method: "GET", url: "/jobs/job-sem-relatorio/report" });
+    const res = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-sem-relatorio/report" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -208,6 +219,8 @@ describe("GET /jobs/:id/report", () => {
       params_json: { copyData: true },
       source_profile_id: null,
       target_profile_id: null,
+      source_database: "origem_a",
+      target_database: "destino_a",
     });
     itemsByJob.set("job-completo", [
       {
@@ -225,23 +238,25 @@ describe("GET /jobs/:id/report", () => {
     ]);
 
     const app = buildApp();
-    await app.inject({ method: "POST", url: "/jobs/job-completo/report" });
+    await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-completo/report" });
 
-    const json = await app.inject({ method: "GET", url: "/jobs/job-completo/report?format=json" });
+    const json = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-completo/report?format=json" });
     expect(json.statusCode).toBe(200);
     const body = JSON.parse(json.body);
     expect(body.tables.total).toBe(1);
     expect(body.tables.rowsCopied).toBe(42);
+    expect(body.sourceDb).toBe("origem_a");
+    expect(body.destinationDb).toBe("destino_a");
 
-    const html = await app.inject({ method: "GET", url: "/jobs/job-completo/report?format=html" });
+    const html = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-completo/report?format=html" });
     expect(html.statusCode).toBe(200);
     expect(html.headers["content-type"]).toContain("text/html");
 
-    const sql = await app.inject({ method: "GET", url: "/jobs/job-completo/report?format=sql" });
+    const sql = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-completo/report?format=sql" });
     expect(sql.statusCode).toBe(200);
     expect(sql.body).toContain("CREATE TABLE clientes");
 
-    const retry = await app.inject({ method: "GET", url: "/jobs/job-completo/report?format=retry" });
+    const retry = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-completo/report?format=retry" });
     expect(retry.statusCode).toBe(404);
   });
 
@@ -270,9 +285,9 @@ describe("GET /jobs/:id/report", () => {
     ]);
 
     const app = buildApp();
-    await app.inject({ method: "POST", url: "/jobs/job-com-erro/report" });
+    await app.inject({ cookies: AUTH, method: "POST", url: "/jobs/job-com-erro/report" });
 
-    const retry = await app.inject({ method: "GET", url: "/jobs/job-com-erro/report?format=retry" });
+    const retry = await app.inject({ cookies: AUTH, method: "GET", url: "/jobs/job-com-erro/report?format=retry" });
     expect(retry.statusCode).toBe(200);
     expect(retry.body).toContain("DROP TABLE IF EXISTS `pedidos`");
   });

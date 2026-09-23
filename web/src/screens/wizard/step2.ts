@@ -14,7 +14,7 @@ import { friendlyError } from "../../lib/errorMessages.js";
  */
 export async function renderStep2(container: HTMLElement): Promise<void> {
   const state = getWizardState();
-  if (!state.feature || !state.sourceProfileId) {
+  if (!state.feature || !state.sourceProfileId || !state.sourceDatabase) {
     navigate("/wizard/step1");
     return;
   }
@@ -27,8 +27,14 @@ export async function renderStep2(container: HTMLElement): Promise<void> {
 
   const discoverRes =
     state.feature === "routines"
-      ? await api.previewRoutines(state.sourceProfileId, { select: "all", newDefiner: state.routinesOptions.newDefiner || undefined })
-      : await api.previewTables(state.sourceProfileId, { select: "all", forceInnodb: state.tablesOptions.forceInnodb });
+      ? await api.previewRoutines(state.sourceProfileId, state.sourceDatabase, {
+          select: "all",
+          newDefiner: state.routinesOptions.newDefiner || undefined,
+        })
+      : await api.previewTables(state.sourceProfileId, state.sourceDatabase, {
+          select: "all",
+          forceInnodb: state.tablesOptions.forceInnodb,
+        });
 
   if (!discoverRes.ok || !discoverRes.data) {
     container.querySelector("#step2-loading")!.outerHTML = `<div class="alert error">${friendlyError(discoverRes.status, "job")}</div>`;

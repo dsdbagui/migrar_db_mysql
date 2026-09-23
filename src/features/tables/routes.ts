@@ -1,25 +1,56 @@
 import type { FastifyInstance } from "fastify";
-import { resolveForConnection } from "../../core/credentialVault.js";
+import { getProfile, resolveForConnection } from "../../core/credentialVault.js";
 import { createJob, runJob, getJobStatus } from "../../core/jobRunner.js";
 import { previewTables, runTablesJob, type TablesJobParams } from "./service.js";
 import { logger } from "../../core/logger.js";
 
+/**
+ * _reversa_forward/005-perfil-conexao-por-usuario (D-06, RN-04): preview e criação de job recebem
+ * o banco de origem/destino no corpo (o perfil não guarda mais banco), os perfis precisam ser do
+ * usuário da sessão (404 caso contrário), e createdBy vem da sessão — não mais do corpo.
+ */
+
+interface TablesPreviewBody {
+  sourceProfileId: string;
+  sourceDatabase: string;
+  select: TablesJobParams["select"];
+  forceInnodb?: boolean;
+}
+
 interface CreateTablesJobBody extends TablesJobParams {
   sourceProfileId: string;
   targetProfileId: string;
-  createdBy?: string;
+  sourceDatabase: string;
+  targetDatabase: string;
+}
+
+function isFilled(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export function registerTablesRoutes(app: FastifyInstance): void {
-  app.post<{ Body: CreateTablesJobBody }>("/tables/preview", async (request, reply) => {
-    const { sourceProfileId, select, forceInnodb } = request.body;
-    const sourceParams = await resolveForConnection(sourceProfileId);
-    const preview = await previewTables(sourceParams, { select, forceInnodb });
+  app.post<{ Body: TablesPreviewBody }>("/tables/preview", async (request, reply) => {
+    const { sourceProfileId, sourceDatabase, select, forceInnodb } = request.body ?? {};
+    if (!isFilled(sourceDatabase)) return reply.code(400).send({ error: "sourceDatabase é obrigatório" });
+    if (!(await getProfile(sourceProfileId, request.userId))) {
+      return reply.code(404).send({ error: "perfil não encontrado" });
+    }
+    const sourceParams = await resolveForConnection(sourceProfileId, sourceDatabase.trim());
+    const preview = await previewTables(sourceParams, { select, forceInnodb: forceInnodb ?? false });
     return reply.send({ items: preview });
   });
 
   app.post<{ Body: CreateTablesJobBody }>("/tables/jobs", async (request, reply) => {
-    const body = request.body;
+    const body = request.body ?? ({} as CreateTablesJobBody);
+    if (!isFilled(body.sourceDatabase) || !isFilled(body.targetDatabase)) {
+      return reply.code(400).send({ error: "sourceDatabase e targetDatabase são obrigatórios" });
+    }
+    const [source, target] = await Promise.all([
+      getProfile(body.sourceProfileId, request.userId),
+      getProfile(body.targetProfileId, request.userId),
+    ]);
+    if (!source || !target) return reply.code(404).send({ error: "perfil não encontrado" });
+
     const jobId = await createJob({
       feature: "tables",
       params: {
@@ -35,7 +66,9 @@ export function registerTablesRoutes(app: FastifyInstance): void {
       } satisfies TablesJobParams,
       sourceProfileId: body.sourceProfileId,
       targetProfileId: body.targetProfileId,
-      createdBy: body.createdBy ?? "unknown",
+      sourceDatabase: body.sourceDatabase.trim(),
+      targetDatabase: body.targetDatabase.trim(),
+      createdBy: request.username,
     });
 
     runJob(jobId, runTablesJob).catch((err) => {

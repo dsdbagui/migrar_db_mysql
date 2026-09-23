@@ -1,10 +1,10 @@
 # Segurança e Stack — migra_db_mysql (versão web)
 
-_2026-09-21_
+_2026-09-21 — atualizado em 2026-09-23 com login de aplicação (`_reversa_forward/005-perfil-conexao-por-usuario`) e troca/redefinição de senha (`_reversa_forward/006-redefinicao-de-senha`)_
 
 ## Resumo
 
-O `migrar_db_mysql` está migrando de um par de scripts CLI Python (`migrate_routines.py`, `fix_collation_stamp.py`) para uma aplicação web Node.js/TypeScript — backend Fastify + frontend Vite —, de uso interno via VPN. A stack é deliberadamente mínima (sem fila/broker externo, sem framework de UI). A segurança apoia-se em dois pilares: o perímetro de rede como controle de acesso (sem login próprio) e um cofre de credenciais cifrado para as senhas dos MySQL de origem/destino migrados.
+O `migrar_db_mysql` está migrando de um par de scripts CLI Python (`migrate_routines.py`, `fix_collation_stamp.py`) para uma aplicação web Node.js/TypeScript — backend Fastify + frontend Vite —, de uso interno via VPN. A stack é deliberadamente mínima (sem fila/broker externo, sem framework de UI). A segurança apoia-se em três pilares: login próprio da aplicação (usuário/senha, sessão em cookie httpOnly), o perímetro de rede (VPN, uso interno) como camada adicional, e um cofre de credenciais cifrado para as senhas dos MySQL de origem/destino migrados — cada perfil de conexão é privado do usuário que o criou.
 
 ## Stack técnica
 
@@ -13,9 +13,11 @@ O `migrar_db_mysql` está migrando de um par de scripts CLI Python (`migrate_rou
 | Backend | Node.js | ≥ 20 | `engines.node` em `package.json` |
 | Backend | TypeScript | 5.5 | compilado via `tsc`, dev via `tsx watch` |
 | Backend (framework HTTP) | Fastify | 5.2 | `src/app.ts` |
-| Backend (CORS) | `@fastify/cors` | 11.3 | restringe por `CORS_ORIGIN` (default `http://localhost:5173`) |
+| Backend (CORS) | `@fastify/cors` | 11.3 | restringe por `CORS_ORIGIN` (default `http://localhost:5173`), com `credentials: true` para o cookie de sessão |
+| Backend (cookie de sessão) | `@fastify/cookie` | 11.x | parsing/emissão do cookie `session` (login da aplicação) |
+| Backend (hash de senha) | `node:crypto` scrypt | — | senha dos usuários da aplicação, sem dependência nova (`src/core/passwordHash.ts`) |
 | Backend (driver MySQL) | `mysql2` | 3.11 | conecta tanto no App DB quanto nos MySQL de origem/destino |
-| Backend (testes) | Vitest | 2.0 | 37 testes automatizados, `npm run test` |
+| Backend (testes) | Vitest | 2.0 | 181 testes automatizados, `npm run test` |
 | Frontend | Vite + TypeScript | Vite 5.4 | sem framework de UI — DOM direto, decisão deliberada de stack mínima |
 | App DB | MySQL 8.x | — | schema próprio (`src/core/db/migrations/001_init.sql`), separado dos bancos que a ferramenta migra |
 | Orquestração de jobs | nenhuma (sem fila/broker) | — | job roda em background no próprio processo Node — decisão AD-01, ver `target_architecture.md` |
@@ -26,7 +28,7 @@ Não há Dockerfile nem manifesto de deploy no repositório ainda — hoje a exe
 
 ```mermaid
 flowchart LR
-    Operador[Operador via VPN] -->|HTTP| API[API / Wizard multi-step - Fastify]
+    Operador[Operador via VPN, autenticado] -->|HTTPS + cookie de sessão| API[API / Wizard multi-step - Fastify]
     API --> Core[Core: Connection Manager, Cofre de Credenciais, Job Runner]
     API --> AppDB[(App DB: perfis, jobs, historico)]
     Core --> AppDB
@@ -36,13 +38,13 @@ flowchart LR
 
 A aplicação escuta em `0.0.0.0` (todas as interfaces) na porta `PORT` (default 3000) — o isolamento de rede na VM de produção (firewall/security group) precisa ser configurado pela infraestrutura, a aplicação em si não restringe por IP de origem.
 
-O **App DB** (`connection_profiles`, `migration_jobs`, `job_items`, `job_item_fk_specs`, `job_reports`) é um MySQL 8.x separado dos bancos que a ferramenta efetivamente migra — guarda só estado da própria aplicação (perfis de conexão cifrados, histórico de jobs). A sugestão original da spec (`target_architecture.md` § Notas) é hospedá-lo como schema separado no próprio MySQL 8.x de destino, para não introduzir um motor de banco novo só para isso — decisão em aberto para a infraestrutura confirmar na VM de produção.
+O **App DB** (`app_users`, `app_sessions`, `connection_profiles`, `migration_jobs`, `job_items`, `job_item_fk_specs`, `job_reports`) é um MySQL 8.x separado dos bancos que a ferramenta efetivamente migra — guarda só estado da própria aplicação (usuários e sessões da aplicação, perfis de conexão cifrados, histórico de jobs). A sugestão original da spec (`target_architecture.md` § Notas) é hospedá-lo como schema separado no próprio MySQL 8.x de destino, para não introduzir um motor de banco novo só para isso — decisão em aberto para a infraestrutura confirmar na VM de produção.
 
 Não há fila/broker externo (Redis, Kafka, SQS): o job de migração roda sequencialmente dentro do próprio processo Node, persistindo progresso incrementalmente no App DB a cada item processado.
 
 ## Cofre de credenciais
 
-Cada perfil de conexão (origem/destino) grava host, porta, usuário e senha do MySQL sendo migrado no App DB (`connection_profiles`). A senha nunca fica em texto claro:
+Cada perfil de conexão (origem/destino) grava host, porta, usuário e senha do MySQL sendo migrado no App DB (`connection_profiles`). O perfil pertence ao usuário da aplicação que o criou (`user_id`) e é **estritamente privado**: nenhum outro usuário lista, lê, exclui ou usa esse perfil numa migração (perfil alheio responde `404`, sem revelar que existe). O perfil não guarda mais o nome do banco — o banco de origem/destino é informado a cada migração. A senha nunca fica em texto claro:
 
 - **Algoritmo**: AES-256-GCM, via `node:crypto` (`src/core/credentialVault.ts`).
 - **Formato armazenado**: `password_enc VARBINARY(512)` = IV (12 bytes) + auth tag (16 bytes) + texto cifrado.
@@ -53,10 +55,16 @@ Cada perfil de conexão (origem/destino) grava host, porta, usuário e senha do 
 
 ## Controle de acesso
 
-- **Sem autenticação/login na aplicação** — decisão confirmada em sessão de esclarecimento (`_reversa_forward/001-frontend-wizard-migracao-web/requirements.md` § Requisitos Não-Funcionais, linha "Segurança"): o controle de acesso assumido é **só o perímetro de rede (VPN, uso interno)**.
-- Isso significa que qualquer máquina com rota de rede até a porta `3000` (backend) e `5173`/porta de build do frontend consegue usar a aplicação inteira — criar/excluir perfis de conexão, disparar migrações reais contra qualquer MySQL alcançável. **A VPN/segmentação de rede da VM é o único controle de acesso** — ponto que a infraestrutura precisa validar antes do go-live.
-- **CORS**: restrito por `CORS_ORIGIN` (env var do backend, default `http://localhost:5173`) — em produção precisa apontar para o domínio real do frontend, senão o navegador bloqueia as chamadas.
-- Nenhuma proteção contra CSRF, rate limiting ou WAF identificada no código atual — coerente com a premissa de "uso interno via VPN", mas vale confirmar se essa premissa segue válida na topologia de rede da VM de produção.
+- **Login próprio da aplicação** (`_reversa_forward/005-perfil-conexao-por-usuario`) — reverte a postura anterior de "sem autenticação, só perímetro de rede" (`_reversa_forward/001-frontend-wizard-migracao-web/requirements.md` § Requisitos Não-Funcionais). Toda rota da API exige sessão válida, exceto `POST /login` e `GET /health`; sem sessão, a resposta é `401` antes de qualquer lógica de negócio (hook `onRequest` global em `src/core/authMiddleware.ts` — rota nova já nasce protegida).
+- **Usuários**: tabela `app_users` no App DB. Senha com hash scrypt (N=2¹⁷, r=8, p=1, salt aleatório de 16 bytes — parâmetros mínimos do OWASP para o fallback memory-hard), irreversível — diferente do cofre de credenciais MySQL, que é cifrado reversível. **Política mínima: 8 caracteres** em toda criação e troca de senha (CLI e API), sem regras de composição. É abaixo dos 15 que a OWASP recomenda para contas sem MFA, uma decisão consciente do operador (`_reversa_forward/006-redefinicao-de-senha/investigation.md` § 4). A política não é aplicada no login: senhas curtas anteriores continuam válidas até a próxima troca. Login errado responde a mesma mensagem genérica para usuário inexistente e senha errada, com o mesmo custo de tempo (não permite enumerar contas).
+- **Cadastro fechado**: `POST /users` exige sessão — não há cadastro público. O primeiro usuário de uma instalação é criado na própria VM com `npm run create-user -- <username>` (mesmo padrão operacional de `CREDENTIAL_VAULT_KEY`). **A senha nunca é argumento de linha de comando**: o script a pede no terminal sem ecoar (com confirmação) ou lê a primeira linha de stdin em scripts de deploy (`printf '%s\n' "$SENHA" | npm run create-user -- <username>`). Assim ela não é interpretada pelo shell e não fica no histórico nem em `ps`.
+- **Troca e redefinição de senha**: cada usuário troca a **própria** senha pela tela "Alterar senha" ou por `POST /users/me/password`, informando a senha atual (senha atual errada responde `403`). Redefinir a senha de **outro** usuário, por exemplo de quem esqueceu a sua, só é possível na VM, com `npm run create-user -- --reset <username>`. Em todos os casos, a troca do hash e o encerramento de **todas** as sessões do usuário acontecem na mesma transação.
+- **Sessão**: token opaco aleatório (32 bytes) em `app_sessions`, enviado no cookie `session` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`). Expira **2 horas após o login**, sem renovação por uso. Logout apaga a linha (invalidação imediata). `SESSION_COOKIE_SECURE=false` existe só para testar por HTTP puro fora de `localhost` — em produção (HTTPS atrás do nginx) deve ficar no padrão.
+- **Identidade nos jobs**: `migration_jobs.created_by` passa a ser o usuário da sessão que disparou o job, não mais texto livre enviado pelo cliente.
+- **Perímetro de rede**: continua valendo como camada adicional — a VPN/segmentação da VM segue sendo recomendada, mas deixou de ser o único controle de acesso.
+- **CORS**: restrito por `CORS_ORIGIN` (env var do backend, default `http://localhost:5173`), agora com `credentials: true` (necessário para o cookie de sessão atravessar origens em dev) — em produção precisa apontar para o domínio real do frontend, nunca para `*`.
+- **CSRF**: mitigado pelo `SameSite=Lax` do cookie (navegadores não o enviam em `POST` disparado por outro site) somado ao CORS restrito; não há token anti-CSRF dedicado. Rate limiting de login e WAF continuam ausentes — nenhum limite de tentativas de senha nesta entrega.
+- **Fora do escopo**: recuperação de senha em autoatendimento (e-mail/link: quem esquece a senha depende de alguém com acesso à VM rodar `--reset`), exclusão de usuário pela aplicação, renovação automática de sessão.
 
 ## Riscos de segurança conhecidos
 
@@ -79,7 +87,9 @@ Cada perfil de conexão (origem/destino) grava host, porta, usuário e senha do 
 
 ## Checklist para produção
 
-- [ ] Definir onde a VM vai ficar na topologia de rede (segmento VPN) — é o único controle de acesso da aplicação hoje.
+- [ ] Definir onde a VM vai ficar na topologia de rede (segmento VPN) — camada adicional ao login da aplicação.
+- [ ] Rodar `npm run create-user` na VM para criar o primeiro usuário antes de liberar o acesso (sem ele, ninguém consegue logar).
+- [ ] Avaliar rate limiting de `POST /login` e `POST /users/me/password` (hoje não há limite de tentativas).
 - [ ] Mover `CREDENTIAL_VAULT_KEY` para secret manager/KMS da VM, fora de `.env` em disco.
 - [ ] Definir procedimento de rotação de credenciais (RISK-005).
 - [ ] Configurar `CORS_ORIGIN` para o domínio real do frontend em produção.
@@ -96,7 +106,9 @@ Cada perfil de conexão (origem/destino) grava host, porta, usuário e senha do 
 | `_reversa_sdd/migration/target_architecture.md` | Stack, componentes, diagrama, decisões arquiteturais (AD-01 a AD-03) |
 | `_reversa_sdd/migration/risk_register.md` | Registro completo de riscos, incluindo RISK-005 (segurança do cofre de credenciais) |
 | `_reversa_sdd/migration/target_data_model.md` | Schema do App DB, incluindo `password_enc` |
-| `_reversa_forward/001-frontend-wizard-migracao-web/requirements.md` | Requisitos não-funcionais de segurança (perimetro VPN, sem login) |
+| `_reversa_forward/001-frontend-wizard-migracao-web/requirements.md` | Requisitos não-funcionais de segurança originais (perimetro VPN, sem login) — superados pela feature 005 |
+| `_reversa_forward/005-perfil-conexao-por-usuario/` | Login de aplicação, sessão, perfis privados por usuário, banco escolhido por migração |
+| `src/core/authMiddleware.ts`, `src/core/authRoutes.ts`, `src/core/passwordHash.ts`, `src/core/sessionStore.ts` | Implementação real da autenticação |
 | `src/core/credentialVault.ts` | Implementação real da cifragem AES-256-GCM |
 | `README.md` (repositório, branch `migracao-web-stack`) | Passo a passo de setup local (App DB, `CREDENTIAL_VAULT_KEY`) |
 

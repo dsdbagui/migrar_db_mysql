@@ -99,11 +99,12 @@ interface JobItemRow {
 async function fetchJob(jobId: string): Promise<JobRow | null> {
   const db = getAppDb();
   const [rows] = await db.query<any[]>(
+    // _reversa_forward/005-perfil-conexao-por-usuario (D-07): o banco de cada lado é do job, não
+    // mais do perfil (connection_profiles.database_name deixou de existir em 005_*.sql).
+    // target_database '' é o DEFAULT de jobs anteriores a 006_*.sql — sem banco conhecido.
     `SELECT j.id, j.feature, j.status, j.params_json,
-            src.database_name AS source_db, dst.database_name AS destination_db
+            j.source_database AS source_db, NULLIF(j.target_database, '') AS destination_db
      FROM migration_jobs j
-     LEFT JOIN connection_profiles src ON src.id = j.source_profile_id
-     LEFT JOIN connection_profiles dst ON dst.id = j.target_profile_id
      WHERE j.id = ?`,
     [jobId],
   );

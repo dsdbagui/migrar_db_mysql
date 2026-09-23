@@ -15,15 +15,25 @@ export interface SubmitResult {
 
 export async function submitJob(): Promise<SubmitResult> {
   const state = getWizardState();
-  if (!state.feature || !state.sourceProfileId || !state.targetProfileId) {
+  if (
+    !state.feature ||
+    !state.sourceProfileId ||
+    !state.targetProfileId ||
+    !state.sourceDatabase ||
+    !state.targetDatabase
+  ) {
     return { ok: false, errorMessage: "Etapas anteriores incompletas." };
   }
 
+  // _reversa_forward/005-perfil-conexao-por-usuario: o banco de cada lado vai no job (D-06), e
+  // createdBy não é mais enviado — o backend usa o usuário da sessão (RN-04).
+  const databases = { sourceDatabase: state.sourceDatabase, targetDatabase: state.targetDatabase };
   const res =
     state.feature === "routines"
       ? await api.createRoutinesJob({
           sourceProfileId: state.sourceProfileId,
           targetProfileId: state.targetProfileId,
+          ...databases,
           select: state.select,
           newDefiner: state.routinesOptions.newDefiner || undefined,
           dropExisting: state.routinesOptions.dropExisting,
@@ -31,6 +41,7 @@ export async function submitJob(): Promise<SubmitResult> {
       : await api.createTablesJob({
           sourceProfileId: state.sourceProfileId,
           targetProfileId: state.targetProfileId,
+          ...databases,
           select: state.select,
           copyData: state.tablesOptions.copyData,
           skipCreate: state.tablesOptions.skipCreate,

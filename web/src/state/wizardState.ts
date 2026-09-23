@@ -28,6 +28,13 @@ export interface WizardState {
   feature: Feature | null;
   sourceProfileId: string | null;
   targetProfileId: string | null;
+  /**
+   * _reversa_forward/005-perfil-conexao-por-usuario (D-05): banco de origem/destino desta migração,
+   * informado na Etapa 1 — o perfil de conexão não guarda mais banco, e a Etapa 2 já precisa do
+   * banco de origem para listar os itens disponíveis.
+   */
+  sourceDatabase: string;
+  targetDatabase: string;
   select: "all" | string[];
   routinesOptions: RoutinesOptions;
   tablesOptions: TablesOptions;
@@ -42,6 +49,8 @@ function initialState(): WizardState {
     feature: null,
     sourceProfileId: null,
     targetProfileId: null,
+    sourceDatabase: "",
+    targetDatabase: "",
     select: "all",
     routinesOptions: { newDefiner: "", dropExisting: true },
     tablesOptions: {
@@ -73,10 +82,16 @@ export function updateWizardState(patch: Partial<WizardState>): void {
   state = { ...state, ...patch };
 }
 
-/** Fingerprint da combinação feature+seleção+opções — usado para invalidar o preview (RN-02). */
+/** Fingerprint da combinação feature+origem+seleção+opções — usado para invalidar o preview (RN-02). */
 export function currentFingerprint(): string {
   const options = state.feature === "tables" ? state.tablesOptions : state.routinesOptions;
-  return JSON.stringify({ feature: state.feature, select: state.select, options });
+  return JSON.stringify({
+    feature: state.feature,
+    sourceProfileId: state.sourceProfileId,
+    sourceDatabase: state.sourceDatabase,
+    select: state.select,
+    options,
+  });
 }
 
 export function isPreviewStale(): boolean {

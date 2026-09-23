@@ -12,10 +12,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node --env-file=.env dist/server.js",
     "migrate": "tsx --env-file=.env src/core/db/migrate.ts",
+    "create-user": "tsx --env-file=.env src/core/db/createUser.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "fastify": "^5.2.1",
     "mysql2": "^3.11.0"

@@ -3,15 +3,19 @@ import { friendlyError } from "../lib/errorMessages.js";
 
 /**
  * Tela de gerenciamento de perfis de conexão (RF-01, RF-09) — listar, criar, excluir.
- * Consome `/connection-profiles*` (`src/core/profileRoutes.ts`), sem alteração de contrato.
+ * Consome `/connection-profiles*` (`src/core/profileRoutes.ts`).
+ *
+ * _reversa_forward/005-perfil-conexao-por-usuario (RF-07): o perfil não tem mais banco — o banco
+ * de origem/destino é escolhido a cada migração, na Etapa 1 do wizard. A lista mostra só os
+ * perfis do usuário logado (o backend filtra pelo dono da sessão).
  */
 export async function renderConnectionProfiles(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <h1>Perfis de conexão</h1>
     <div id="profile-alert"></div>
     <table id="profile-table">
-      <thead><tr><th>Rótulo</th><th>Host</th><th>Porta</th><th>Usuário</th><th>Banco</th><th></th></tr></thead>
-      <tbody id="profile-rows"><tr><td colspan="6">Carregando…</td></tr></tbody>
+      <thead><tr><th>Rótulo</th><th>Host</th><th>Porta</th><th>Usuário</th><th></th></tr></thead>
+      <tbody id="profile-rows"><tr><td colspan="5">Carregando…</td></tr></tbody>
     </table>
 
     <h2>Novo perfil</h2>
@@ -21,7 +25,6 @@ export async function renderConnectionProfiles(container: HTMLElement): Promise<
       <div class="field"><label>Porta</label><input type="number" name="port" value="3306" required /></div>
       <div class="field"><label>Usuário</label><input type="text" name="user" required /></div>
       <div class="field"><label>Senha</label><input type="password" name="password" required autocomplete="new-password" /></div>
-      <div class="field"><label>Banco (opcional)</label><input type="text" name="databaseName" /></div>
       <div class="actions"><button type="submit">Salvar perfil</button></div>
     </form>
   `;
@@ -37,7 +40,7 @@ export async function renderConnectionProfiles(container: HTMLElement): Promise<
   async function loadProfiles(): Promise<void> {
     const res = await api.listProfiles();
     if (!res.ok || !res.data) {
-      rowsEl.innerHTML = `<tr><td colspan="6">${friendlyError(res.status, "job")}</td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="5">${friendlyError(res.status, "job")}</td></tr>`;
       return;
     }
     renderRows(res.data);
@@ -45,7 +48,7 @@ export async function renderConnectionProfiles(container: HTMLElement): Promise<
 
   function renderRows(profiles: ConnectionProfile[]): void {
     if (profiles.length === 0) {
-      rowsEl.innerHTML = `<tr><td colspan="6">Nenhum perfil cadastrado ainda.</td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="5">Nenhum perfil cadastrado ainda.</td></tr>`;
       return;
     }
     rowsEl.innerHTML = profiles
@@ -56,7 +59,6 @@ export async function renderConnectionProfiles(container: HTMLElement): Promise<
         <td>${escapeHtml(p.host)}</td>
         <td>${p.port}</td>
         <td>${escapeHtml(p.user)}</td>
-        <td>${escapeHtml(p.databaseName ?? "—")}</td>
         <td><button type="button" class="secondary" data-action="delete" data-id="${p.id}">Excluir</button></td>
       </tr>`,
       )
@@ -89,7 +91,6 @@ export async function renderConnectionProfiles(container: HTMLElement): Promise<
       port: Number(formData.get("port") ?? 3306),
       user: String(formData.get("user") ?? ""),
       password: String(formData.get("password") ?? ""),
-      databaseName: String(formData.get("databaseName") ?? "") || undefined,
     };
     const res = await api.createProfile(body);
     if (res.ok) {

@@ -11,7 +11,7 @@ import { submitJob } from "./confirmSubmit.js";
  */
 export function renderStep4(container: HTMLElement): void {
   const state = getWizardState();
-  if (!state.feature || !state.sourceProfileId || !state.targetProfileId) {
+  if (!state.feature || !state.sourceProfileId || !state.targetProfileId || !state.sourceDatabase || !state.targetDatabase) {
     navigate("/wizard/step1");
     return;
   }
@@ -42,11 +42,11 @@ export function renderStep4(container: HTMLElement): void {
     const currentState = getWizardState();
     const res =
       currentState.feature === "routines"
-        ? await api.previewRoutines(currentState.sourceProfileId!, {
+        ? await api.previewRoutines(currentState.sourceProfileId!, currentState.sourceDatabase, {
             select: currentState.select,
             newDefiner: currentState.routinesOptions.newDefiner || undefined,
           })
-        : await api.previewTables(currentState.sourceProfileId!, {
+        : await api.previewTables(currentState.sourceProfileId!, currentState.sourceDatabase, {
             select: currentState.select,
             forceInnodb: currentState.tablesOptions.forceInnodb,
           });

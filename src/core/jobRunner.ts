@@ -70,6 +70,10 @@ export interface CreateJobInput {
   params: Record<string, unknown>;
   sourceProfileId?: string;
   targetProfileId: string;
+  /** _reversa_forward/005-perfil-conexao-por-usuario (D-07): o banco vem do job, não do perfil. */
+  sourceDatabase?: string;
+  targetDatabase: string;
+  /** Identidade do usuário da sessão que disparou o job (RN-04) — nunca texto livre do cliente. */
   createdBy: string;
 }
 
@@ -77,13 +81,16 @@ export async function createJob(input: CreateJobInput): Promise<string> {
   const db = getAppDb();
   const id = randomUUID();
   await db.query(
-    `INSERT INTO migration_jobs (id, feature, source_profile_id, target_profile_id, status, params_json, created_by)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    `INSERT INTO migration_jobs
+       (id, feature, source_profile_id, source_database, target_profile_id, target_database, status, params_json, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     [
       id,
       input.feature,
       input.sourceProfileId ?? null,
+      input.sourceDatabase ?? null,
       input.targetProfileId,
+      input.targetDatabase,
       JSON.stringify(input.params),
       input.createdBy,
     ],
@@ -218,8 +225,12 @@ export async function runJob(jobId: string, runner: FeatureRunner): Promise<void
   );
 
   const alreadyProcessed = await getProcessedNames(jobId);
-  const targetParams = await resolveForConnection(job.target_profile_id);
-  const sourceParams = job.source_profile_id ? await resolveForConnection(job.source_profile_id) : undefined;
+  // _reversa_forward/005-perfil-conexao-por-usuario (D-04/D-07): o banco de cada lado vem das
+  // colunas do próprio job. target_database '' é o DEFAULT de jobs anteriores a 006_*.sql.
+  const targetParams = await resolveForConnection(job.target_profile_id, job.target_database || undefined);
+  const sourceParams = job.source_profile_id
+    ? await resolveForConnection(job.source_profile_id, job.source_database ?? undefined)
+    : undefined;
 
   const isCancelled = async (): Promise<boolean> => {
     const [statusRows] = await db.query<any[]>("SELECT status FROM migration_jobs WHERE id = ?", [jobId]);

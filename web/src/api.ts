@@ -3,7 +3,14 @@
  * `src/core/profileRoutes.ts` (backend). Nenhum endpoint aqui é inventado — os contratos
  * espelham exatamente o que já existe, exceto o de relatório (`/jobs/:id/report`), novo
  * nesta entrega (ver `_reversa_forward/001-frontend-wizard-migracao-web/interfaces/relatorio-de-job.md`).
+ *
+ * _reversa_forward/005-perfil-conexao-por-usuario: toda chamada leva o cookie de sessão
+ * (`credentials: "include"` — o backend roda em outra origem em dev), e qualquer 401 manda o
+ * operador para a tela de login (exceto a própria chamada de login, que usa 401 para
+ * "credenciais inválidas").
  */
+
+import { navigate } from "./router.js";
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3000";
 
@@ -20,11 +27,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       ...init,
+      credentials: "include",
       headers: init?.body ? { "Content-Type": "application/json", ...(init?.headers ?? {}) } : init?.headers,
     });
   } catch {
     // Falha de rede (backend fora do ar, DNS, etc.) — tratada pelo chamador via friendlyError.
     return { ok: false, status: 0, data: null };
+  }
+  if (res.status === 401 && path !== "/login" && location.hash !== "#/login") {
+    navigate("/login");
   }
   const text = await res.text();
   let data: T | null = null;
@@ -44,7 +55,6 @@ export interface ConnectionProfile {
   host: string;
   port: number;
   user: string;
-  databaseName: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -55,7 +65,17 @@ export interface CreateProfileBody {
   port?: number;
   user: string;
   password: string;
-  databaseName?: string;
+}
+
+export interface Credentials {
+  username: string;
+  password: string;
+}
+
+/** Banco de origem/destino escolhido por migração (D-05/D-06) — o perfil não guarda mais banco. */
+export interface JobDatabases {
+  sourceDatabase: string;
+  targetDatabase: string;
 }
 
 export interface Issue {
@@ -126,6 +146,17 @@ export interface TablesJobParams {
 }
 
 export const api = {
+  login: (body: Credentials) => request<{ error?: string }>("/login", { method: "POST", body: JSON.stringify(body) }),
+
+  logout: () => request<void>("/logout", { method: "POST" }),
+
+  createUser: (body: Credentials) =>
+    request<{ id: string; username: string; error?: string }>("/users", { method: "POST", body: JSON.stringify(body) }),
+
+  /** Troca a própria senha (_reversa_forward/006-redefinicao-de-senha). Sucesso = 204 e sessão encerrada. */
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<{ error?: string }>("/users/me/password", { method: "POST", body: JSON.stringify(body) }),
+
   listProfiles: () => request<ConnectionProfile[]>("/connection-profiles"),
 
   createProfile: (body: CreateProfileBody) =>
@@ -133,22 +164,26 @@ export const api = {
 
   deleteProfile: (id: string) => request<{ error?: string }>(`/connection-profiles/${id}`, { method: "DELETE" }),
 
-  previewRoutines: (sourceProfileId: string, params: RoutinesJobParams) =>
+  previewRoutines: (sourceProfileId: string, sourceDatabase: string, params: RoutinesJobParams) =>
     request<{ items: PreviewItem[] }>("/routines/preview", {
       method: "POST",
-      body: JSON.stringify({ sourceProfileId, ...params }),
+      body: JSON.stringify({ sourceProfileId, sourceDatabase, ...params }),
     }),
 
-  previewTables: (sourceProfileId: string, params: Pick<TablesJobParams, "select" | "forceInnodb">) =>
+  previewTables: (
+    sourceProfileId: string,
+    sourceDatabase: string,
+    params: Pick<TablesJobParams, "select" | "forceInnodb">,
+  ) =>
     request<{ items: PreviewItem[] }>("/tables/preview", {
       method: "POST",
-      body: JSON.stringify({ sourceProfileId, ...params }),
+      body: JSON.stringify({ sourceProfileId, sourceDatabase, ...params }),
     }),
 
-  createRoutinesJob: (body: RoutinesJobParams & { sourceProfileId: string; targetProfileId: string }) =>
+  createRoutinesJob: (body: RoutinesJobParams & JobDatabases & { sourceProfileId: string; targetProfileId: string }) =>
     request<{ id: string }>("/routines/jobs", { method: "POST", body: JSON.stringify(body) }),
 
-  createTablesJob: (body: TablesJobParams & { sourceProfileId: string; targetProfileId: string }) =>
+  createTablesJob: (body: TablesJobParams & JobDatabases & { sourceProfileId: string; targetProfileId: string }) =>
     request<{ id: string }>("/tables/jobs", { method: "POST", body: JSON.stringify(body) }),
 
   getJobStatus: (feature: Feature, id: string) => request<JobStatusResponse>(`/${feature}/jobs/${id}`),

@@ -11,6 +11,12 @@
     "src/features/jobs/**",
     "tests/features/jobs/**",
     "src/features/routines/**",
-    "src/features/tables/**"
+    "src/features/tables/**",
+    "package.json",
+    "tests/features/tables/**",
+    "tests/features/routines/**",
+    "package-lock.json",
+    "docs/seguranca-e-stack.md",
+    "docs/deploy-hermes.md"
   ]
 }

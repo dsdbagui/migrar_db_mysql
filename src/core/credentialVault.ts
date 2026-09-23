@@ -9,6 +9,10 @@ import type { ConnectionParams } from "./connectionManager.js";
  *
  * Nunca retorna a senha em texto claro por nenhum método de consulta (BR-MIGRAR-015) —
  * só `resolveForConnection`, usado internamente pelo Connection Manager, decifra.
+ *
+ * _reversa_forward/005-perfil-conexao-por-usuario: cada perfil tem um dono (user_id) e é
+ * estritamente privado (RN-02) — toda consulta exposta à API filtra pelo dono. O perfil não
+ * guarda mais banco (RN-03): o banco vem de cada job, por parâmetro de resolveForConnection (D-04).
  */
 
 export interface ConnectionProfile {
@@ -17,19 +21,18 @@ export interface ConnectionProfile {
   host: string;
   port: number;
   user: string;
-  databaseName: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 interface ConnectionProfileRow {
   id: string;
+  user_id: string;
   label: string;
   host: string;
   port: number;
   user: string;
   password_enc: Buffer;
-  database_name: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -73,63 +76,66 @@ function rowToProfile(row: ConnectionProfileRow): ConnectionProfile {
     host: row.host,
     port: row.port,
     user: row.user,
-    databaseName: row.database_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export async function createProfile(input: {
+  userId: string;
   label: string;
   host: string;
   port: number;
   user: string;
   password: string;
-  databaseName?: string;
 }): Promise<ConnectionProfile> {
   const db = getAppDb();
   const id = randomUUID();
   await db.query(
-    `INSERT INTO connection_profiles (id, label, host, port, user, password_enc, database_name)
+    `INSERT INTO connection_profiles (id, user_id, label, host, port, user, password_enc)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      input.label,
-      input.host,
-      input.port,
-      input.user,
-      encryptPassword(input.password),
-      input.databaseName ?? null,
-    ],
+    [id, input.userId, input.label, input.host, input.port, input.user, encryptPassword(input.password)],
   );
-  const profile = await getProfile(id);
+  const profile = await getProfile(id, input.userId);
   if (!profile) throw new Error("Falha ao criar perfil de conexão");
   return profile;
 }
 
-export async function listProfiles(): Promise<ConnectionProfile[]> {
+export async function listProfiles(userId: string): Promise<ConnectionProfile[]> {
   const db = getAppDb();
-  const [rows] = await db.query<any[]>("SELECT * FROM connection_profiles ORDER BY label");
+  const [rows] = await db.query<any[]>("SELECT * FROM connection_profiles WHERE user_id = ? ORDER BY label", [
+    userId,
+  ]);
   return (rows as ConnectionProfileRow[]).map(rowToProfile);
 }
 
-export async function getProfile(id: string): Promise<ConnectionProfile | null> {
+/** Perfil de outro dono é indistinguível de perfil inexistente: ambos retornam null. */
+export async function getProfile(id: string, userId: string): Promise<ConnectionProfile | null> {
   const db = getAppDb();
-  const [rows] = await db.query<any[]>("SELECT * FROM connection_profiles WHERE id = ?", [id]);
+  const [rows] = await db.query<any[]>("SELECT * FROM connection_profiles WHERE id = ? AND user_id = ?", [
+    id,
+    userId,
+  ]);
   const row = (rows as ConnectionProfileRow[])[0];
   return row ? rowToProfile(row) : null;
 }
 
-export async function deleteProfile(id: string): Promise<void> {
+/** Retorna false quando o perfil não existe ou pertence a outro dono (nada é apagado). */
+export async function deleteProfile(id: string, userId: string): Promise<boolean> {
   const db = getAppDb();
-  await db.query("DELETE FROM connection_profiles WHERE id = ?", [id]);
+  const [result] = await db.query<any>("DELETE FROM connection_profiles WHERE id = ? AND user_id = ?", [id, userId]);
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 /**
  * Único ponto que decifra a senha — usado pelo core/connectionManager.ts para de fato
  * abrir a conexão MySQL. Nunca expor o retorno desta função via API HTTP.
+ *
+ * Não filtra por dono: roda também dentro de runJob, em background, sem sessão. A posse do
+ * perfil é verificada pelas rotas (getProfile com o userId da sessão) antes de o job existir.
+ * `database` vem do job/preview (D-04) — o mesmo perfil serve a bancos diferentes.
  */
-export async function resolveForConnection(id: string): Promise<ConnectionParams> {
+export async function resolveForConnection(id: string, database?: string): Promise<ConnectionParams> {
   const db = getAppDb();
   const [rows] = await db.query<any[]>("SELECT * FROM connection_profiles WHERE id = ?", [id]);
   const row = (rows as ConnectionProfileRow[])[0];
@@ -139,6 +145,6 @@ export async function resolveForConnection(id: string): Promise<ConnectionParams
     port: row.port,
     user: row.user,
     password: decryptPassword(row.password_enc),
-    database: row.database_name ?? undefined,
+    database,
   };
 }
