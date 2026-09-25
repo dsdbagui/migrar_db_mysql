@@ -66,6 +66,7 @@ A aplicação roda com um usuário próprio, sem shell interativo e sem ser o `r
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/migracao --shell /usr/sbin/nologin migracao
+sudo chmod o+x /opt/migracao   # sem isso, nem o próprio "cd" abaixo funciona, e mais tarde o nginx não atravessa o diretório
 ```
 
 Acesso ao GitHub com uma **deploy key** somente leitura, como na hermes:
@@ -162,7 +163,6 @@ O `create-user` pede a senha sem mostrá-la na tela, com confirmação e no mín
 ```bash
 sudo -u migracao npm run build                          # backend → dist/
 sudo -u migracao bash -c 'cd web && npx vite build'     # frontend → web/dist/
-sudo chmod o+x /opt/migracao                            # o nginx precisa atravessar o diretório
 ```
 
 ## 8. Certificado TLS
@@ -308,6 +308,7 @@ Antes de atualizar, confira se não há job em execução (tela "Histórico"): o
 | Página não abre de fora, mas `curl` na VM funciona | `iptables` da VM (passo 2) ou NSG/Security List da OCI |
 | Nome não resolve num Mac/Linux | Domínio `.local` indo para o mDNS (ver Pré-requisitos) |
 | Tela em branco com 404 nos `.js` | Build do frontend feito com `--base` diferente de `/`. Refaça o passo 7 sem `--base` |
+| `curl: (6) Could not resolve host` ao testar com o hostname **na própria VM** (passo 11) | VMs OCI usam por padrão só o resolvedor da VCN (`169.254.169.254`), que não conhece a zona DNS interna da empresa. Isso não impede clientes na VPN (que usam o DNS interno) de acessar normalmente — é só a VM que não se autorresolve. Para os testes locais do passo 11 funcionarem, adicione uma entrada em `/etc/hosts`: `echo "<IP da VM> prometeu.grupoqw.local" \| sudo tee -a /etc/hosts`. Separadamente, confirme com quem administra o DNS interno que o registro real (para os clientes de fora) existe |
 
 ## Referências
 
