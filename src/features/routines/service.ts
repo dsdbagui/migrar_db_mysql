@@ -1,4 +1,4 @@
-import { connect, ensureConnected, type ConnectionParams } from "../../core/connectionManager.js";
+import { connect, ensureConnected, DESTINATION_CHARSET, type ConnectionParams } from "../../core/connectionManager.js";
 import type { FeatureRunContext, JobItemResult } from "../../core/jobRunner.js";
 import { fetchRoutines, type ExtractedRoutine } from "./extract.js";
 import { transformRoutine } from "./transform.js";
@@ -45,8 +45,11 @@ export async function runRoutinesJob(ctx: FeatureRunContext): Promise<void> {
   const params = ctx.params as unknown as RoutinesJobParams;
   if (!ctx.sourceParams) throw new Error("Feature 'routines' requer conexão de origem");
 
+  // BUG-20260925-EXY2: charset só no DESTINO — a ORIGEM pode ser um MySQL 5.x.
+  const destParams: ConnectionParams = { ...ctx.targetParams, charset: DESTINATION_CHARSET };
+
   let srcConn = await connect("ORIGEM", ctx.sourceParams);
-  let dstConn = await connect("DESTINO", ctx.targetParams);
+  let dstConn = await connect("DESTINO", destParams);
 
   try {
     const routines = await fetchRoutines(srcConn, ctx.sourceParams.database ?? "");
@@ -58,7 +61,7 @@ export async function runRoutinesJob(ctx: FeatureRunContext): Promise<void> {
       if (await ctx.isCancelled()) break;
 
       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
-      dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
+      dstConn = await ensureConnected(dstConn, "DESTINO", destParams);
 
       const item: JobItemResult = {
         itemType: "routine",

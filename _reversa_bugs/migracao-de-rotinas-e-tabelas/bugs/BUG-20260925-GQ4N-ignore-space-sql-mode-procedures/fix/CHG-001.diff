@@ -1,0 +1,117 @@
+diff --git a/src/core/issue.ts b/src/core/issue.ts
+index 356dced..f84e778 100644
+--- a/src/core/issue.ts
++++ b/src/core/issue.ts
+@@ -16,6 +16,7 @@ export type IssueCode =
+   | "SET_OPTION"
+   | "OLD_PASSWORD"
+   | "SQL_MODE_NO_AUTO_CREATE_USER"
++  | "SQL_MODE_IGNORE_SPACE"
+   | "ZERO_DATE"
+   | "GROUP_CONCAT"
+   | "SQL_SECURITY_DEFINER"
+diff --git a/src/features/routines/transform.ts b/src/features/routines/transform.ts
+index 59a1a0b..93d648d 100644
+--- a/src/features/routines/transform.ts
++++ b/src/features/routines/transform.ts
+@@ -1,4 +1,4 @@
+-import { makeIssue, type Issue } from "../../core/issue.js";
++import { makeIssue, type Issue, type IssueCode, type IssueSeverity } from "../../core/issue.js";
+ 
+ /**
+  * Porte 1:1 de remove_definer + as 8 funções da lista TRANSFORMATIONS
+@@ -51,19 +51,50 @@ export const fixOldPasswordHash: Transformation = (ddl) => {
+   ];
+ };
+ 
++/**
++ * BUG-20260925-GQ4N: NO_AUTO_CREATE_USER é mesmo inválido no MySQL 8 (severidade error).
++ * IGNORE_SPACE continua válido no MySQL 8 — removido aqui por decisão operacional do time
++ * de migração, não por incompatibilidade (severidade info, para não sugerir que quebraria).
++ */
++const SQL_MODE_FIXES: Array<{ pattern: RegExp; label: string; code: IssueCode; severity: IssueSeverity; reason: string }> = [
++  {
++    pattern: /NO_AUTO_CREATE_USER/i,
++    label: "NO_AUTO_CREATE_USER",
++    code: "SQL_MODE_NO_AUTO_CREATE_USER",
++    severity: "error",
++    reason: "inválido no MySQL 8",
++  },
++  {
++    pattern: /IGNORE_SPACE/i,
++    label: "IGNORE_SPACE",
++    code: "SQL_MODE_IGNORE_SPACE",
++    severity: "info",
++    reason: "removido do sql_mode por decisão operacional (ainda válido no MySQL 8)",
++  },
++];
++
+ export const cleanSqlMode: Transformation = (ddl) => {
+-  if (!/NO_AUTO_CREATE_USER/i.test(ddl)) return [ddl, null];
+-  const newDdl = ddl.replace(/,?\s*NO_AUTO_CREATE_USER/gi, "");
+-  return [
+-    newDdl,
+-    makeIssue(
+-      "SQL_MODE_NO_AUTO_CREATE_USER",
+-      "error",
+-      "NO_AUTO_CREATE_USER removido do sql_mode (inválido no MySQL 8)",
+-      "NO_AUTO_CREATE_USER",
+-      "(removido)",
+-    ),
+-  ];
++  const found = SQL_MODE_FIXES.filter((f) => f.pattern.test(ddl));
++  if (found.length === 0) return [ddl, null];
++
++  let newDdl = ddl;
++  for (const f of found) {
++    newDdl = newDdl.replace(new RegExp(`,?\\s*${f.label}`, "gi"), "");
++  }
++
++  // found.length >= 1 garantido pelo early-return acima; a asserção só documenta isso ao TS
++  // (noUncheckedIndexedAccess não enxerga essa garantia via found.length).
++  const primary = found.find((f) => f.severity === "error") ?? found[0]!;
++  const labels = found.map((f) => f.label).join(", ");
++
++  if (found.length === 1) {
++    return [
++      newDdl,
++      makeIssue(primary.code, primary.severity, `${primary.label} removido do sql_mode (${primary.reason})`, primary.label, "(removido)"),
++    ];
++  }
++
++  return [newDdl, makeIssue(primary.code, primary.severity, `${labels} removidos do sql_mode`, labels, "(removido)")];
+ };
+ 
+ export const fixNoZeroDate: Transformation = (ddl) => {
+diff --git a/tests/features/routines/transform.test.ts b/tests/features/routines/transform.test.ts
+index ebd2f5c..7edba78 100644
+--- a/tests/features/routines/transform.test.ts
++++ b/tests/features/routines/transform.test.ts
+@@ -64,6 +64,27 @@ describe("cleanSqlMode", () => {
+     expect(ddl).not.toContain("NO_AUTO_CREATE_USER");
+     expect(issue?.code).toBe("SQL_MODE_NO_AUTO_CREATE_USER");
+   });
++
++  it("remove IGNORE_SPACE do sql_mode (BUG-20260925-GQ4N)", () => {
++    const [ddl, issue] = cleanSqlMode("SQL_MODE='STRICT_TRANS_TABLES,IGNORE_SPACE'");
++    expect(ddl).not.toContain("IGNORE_SPACE");
++    expect(issue?.code).toBe("SQL_MODE_IGNORE_SPACE");
++    expect(issue?.severity).toBe("info");
++  });
++
++  it("remove NO_AUTO_CREATE_USER e IGNORE_SPACE juntos, preservando os demais tokens", () => {
++    const [ddl, issue] = cleanSqlMode(
++      "SQL_MODE='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,IGNORE_SPACE,NO_ZERO_DATE'",
++    );
++    expect(ddl).not.toContain("NO_AUTO_CREATE_USER");
++    expect(ddl).not.toContain("IGNORE_SPACE");
++    expect(ddl).toContain("STRICT_TRANS_TABLES");
++    expect(ddl).toContain("NO_ZERO_DATE");
++    // Quando os dois tokens aparecem juntos, o code do Issue prioriza o mais severo
++    // (NO_AUTO_CREATE_USER é error, IGNORE_SPACE é info) — a descrição continua citando os dois.
++    expect(issue?.code).toBe("SQL_MODE_NO_AUTO_CREATE_USER");
++    expect(issue?.description).toContain("IGNORE_SPACE");
++  });
+ });
+ 
+ describe("fixNoZeroDate", () => {

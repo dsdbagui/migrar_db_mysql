@@ -14,7 +14,7 @@ vi.mock("mysql2/promise", () => ({
   default: { createConnection: (...args: unknown[]) => createConnectionMock(...args) },
 }));
 
-const { resolveConnectTimeout, DEFAULT_CONNECT_TIMEOUT_MS, MAX_CONNECT_ATTEMPTS, connect, ensureConnected } =
+const { resolveConnectTimeout, DEFAULT_CONNECT_TIMEOUT_MS, MAX_CONNECT_ATTEMPTS, connect, ensureConnected, DESTINATION_CHARSET } =
   await import("../../src/core/connectionManager.js");
 
 const testParams = { host: "10.255.255.1", port: 3306, user: "root", password: "x", database: "db" };
@@ -121,5 +121,31 @@ describe("ensureConnected — ping() com teto de tempo (RF-03, D-02)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("connect — charset da conexão (BUG-20260925-EXY2)", () => {
+  it("não define charset quando params.charset está ausente (protege a ORIGEM, que pode ser MySQL 5.x)", async () => {
+    const fakeConn = { ping: vi.fn(), end: vi.fn() };
+    createConnectionMock.mockResolvedValueOnce(fakeConn as never);
+
+    await connect("Origem", testParams);
+
+    const call = createConnectionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(call.charset).toBeUndefined();
+  });
+
+  it("repassa params.charset para mysql.createConnection quando informado (uso: DESTINO)", async () => {
+    const fakeConn = { ping: vi.fn(), end: vi.fn() };
+    createConnectionMock.mockResolvedValueOnce(fakeConn as never);
+
+    await connect("Destino", { ...testParams, charset: DESTINATION_CHARSET });
+
+    const call = createConnectionMock.mock.calls[0][0];
+    expect(call).toMatchObject({ charset: DESTINATION_CHARSET });
+  });
+
+  it("DESTINATION_CHARSET é UTF8MB4_0900_AI_CI, mesma collation do CREATE DATABASE e das migrations do App DB", () => {
+    expect(DESTINATION_CHARSET).toBe("UTF8MB4_0900_AI_CI");
   });
 });

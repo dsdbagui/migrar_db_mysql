@@ -1,0 +1,144 @@
+diff --git a/src/core/connectionManager.ts b/src/core/connectionManager.ts
+index 1be4c50..7fb5604 100644
+--- a/src/core/connectionManager.ts
++++ b/src/core/connectionManager.ts
+@@ -14,8 +14,22 @@ export interface ConnectionParams {
+   user: string;
+   password: string;
+   database?: string;
++  /**
++   * BUG-20260925-EXY2: charset/collation explícito da conexão (ex. "UTF8MB4_0900_AI_CI").
++   * Deixe ausente para conexões com a ORIGEM — um MySQL 5.x pode não reconhecer collations
++   * introduzidas no MySQL 8 (ex. utf8mb4_0900_ai_ci, charset id 255). Use DESTINATION_CHARSET
++   * só para a conexão de DESTINO.
++   */
++  charset?: string;
+ }
+ 
++/**
++ * BUG-20260925-EXY2: collation padrão do DESTINO, a mesma já usada no CREATE DATABASE logo
++ * abaixo e em todas as migrations do App DB (src/core/db/migrations/*.sql). Sem isso, o mysql2
++ * aplica seu próprio default (UTF8MB4_UNICODE_CI — connection_config.js:176), divergente do destino.
++ */
++export const DESTINATION_CHARSET = "UTF8MB4_0900_AI_CI";
++
+ export type MigrationConnection = mysql.Connection;
+ 
+ /**
+@@ -52,6 +66,7 @@ export async function connect(label: string, params: ConnectionParams): Promise<
+         user: params.user,
+         password: params.password,
+         database: params.database,
++        charset: params.charset,
+         multipleStatements: false,
+         connectTimeout,
+       });
+diff --git a/src/features/routines/service.ts b/src/features/routines/service.ts
+index 966104d..b4e85ac 100644
+--- a/src/features/routines/service.ts
++++ b/src/features/routines/service.ts
+@@ -1,4 +1,4 @@
+-import { connect, ensureConnected, type ConnectionParams } from "../../core/connectionManager.js";
++import { connect, ensureConnected, DESTINATION_CHARSET, type ConnectionParams } from "../../core/connectionManager.js";
+ import type { FeatureRunContext, JobItemResult } from "../../core/jobRunner.js";
+ import { fetchRoutines, type ExtractedRoutine } from "./extract.js";
+ import { transformRoutine } from "./transform.js";
+@@ -45,8 +45,11 @@ export async function runRoutinesJob(ctx: FeatureRunContext): Promise<void> {
+   const params = ctx.params as unknown as RoutinesJobParams;
+   if (!ctx.sourceParams) throw new Error("Feature 'routines' requer conexão de origem");
+ 
++  // BUG-20260925-EXY2: charset só no DESTINO — a ORIGEM pode ser um MySQL 5.x.
++  const destParams: ConnectionParams = { ...ctx.targetParams, charset: DESTINATION_CHARSET };
++
+   let srcConn = await connect("ORIGEM", ctx.sourceParams);
+-  let dstConn = await connect("DESTINO", ctx.targetParams);
++  let dstConn = await connect("DESTINO", destParams);
+ 
+   try {
+     const routines = await fetchRoutines(srcConn, ctx.sourceParams.database ?? "");
+@@ -58,7 +61,7 @@ export async function runRoutinesJob(ctx: FeatureRunContext): Promise<void> {
+       if (await ctx.isCancelled()) break;
+ 
+       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
+-      dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
++      dstConn = await ensureConnected(dstConn, "DESTINO", destParams);
+ 
+       const item: JobItemResult = {
+         itemType: "routine",
+diff --git a/src/features/tables/service.ts b/src/features/tables/service.ts
+index d1e6d75..78d159b 100644
+--- a/src/features/tables/service.ts
++++ b/src/features/tables/service.ts
+@@ -3,6 +3,7 @@ import {
+   connect,
+   connectWithAutoCreateDatabase,
+   ensureConnected,
++  DESTINATION_CHARSET,
+   type ConnectionParams,
+ } from "../../core/connectionManager.js";
+ import {
+@@ -67,8 +68,11 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
+   const params = ctx.params as unknown as TablesJobParams;
+   if (!ctx.sourceParams) throw new Error("Feature 'tables' requer conexão de origem");
+ 
++  // BUG-20260925-EXY2: charset só no DESTINO — a ORIGEM pode ser um MySQL 5.x.
++  const destParams: ConnectionParams = { ...ctx.targetParams, charset: DESTINATION_CHARSET };
++
+   let srcConn = await connect("ORIGEM", ctx.sourceParams);
+-  let dstConn = await connectWithAutoCreateDatabase("DESTINO", ctx.targetParams, params.createDatabaseIfMissing);
++  let dstConn = await connectWithAutoCreateDatabase("DESTINO", destParams, params.createDatabaseIfMissing);
+   const srcDb = ctx.sourceParams.database ?? "";
+   const dstDb = ctx.targetParams.database ?? "";
+ 
+@@ -84,7 +88,7 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
+       if (await ctx.isCancelled()) break;
+ 
+       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
+-      dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
++      dstConn = await ensureConnected(dstConn, "DESTINO", destParams);
+ 
+       const item: JobItemResult = {
+         itemType: "table",
+diff --git a/tests/core/connectionManager.test.ts b/tests/core/connectionManager.test.ts
+index 329fdf6..f0e8c8e 100644
+--- a/tests/core/connectionManager.test.ts
++++ b/tests/core/connectionManager.test.ts
+@@ -14,7 +14,7 @@ vi.mock("mysql2/promise", () => ({
+   default: { createConnection: (...args: unknown[]) => createConnectionMock(...args) },
+ }));
+ 
+-const { resolveConnectTimeout, DEFAULT_CONNECT_TIMEOUT_MS, MAX_CONNECT_ATTEMPTS, connect, ensureConnected } =
++const { resolveConnectTimeout, DEFAULT_CONNECT_TIMEOUT_MS, MAX_CONNECT_ATTEMPTS, connect, ensureConnected, DESTINATION_CHARSET } =
+   await import("../../src/core/connectionManager.js");
+ 
+ const testParams = { host: "10.255.255.1", port: 3306, user: "root", password: "x", database: "db" };
+@@ -123,3 +123,29 @@ describe("ensureConnected — ping() com teto de tempo (RF-03, D-02)", () => {
+     }
+   });
+ });
++
++describe("connect — charset da conexão (BUG-20260925-EXY2)", () => {
++  it("não define charset quando params.charset está ausente (protege a ORIGEM, que pode ser MySQL 5.x)", async () => {
++    const fakeConn = { ping: vi.fn(), end: vi.fn() };
++    createConnectionMock.mockResolvedValueOnce(fakeConn as never);
++
++    await connect("Origem", testParams);
++
++    const call = createConnectionMock.mock.calls[0][0] as Record<string, unknown>;
++    expect(call.charset).toBeUndefined();
++  });
++
++  it("repassa params.charset para mysql.createConnection quando informado (uso: DESTINO)", async () => {
++    const fakeConn = { ping: vi.fn(), end: vi.fn() };
++    createConnectionMock.mockResolvedValueOnce(fakeConn as never);
++
++    await connect("Destino", { ...testParams, charset: DESTINATION_CHARSET });
++
++    const call = createConnectionMock.mock.calls[0][0];
++    expect(call).toMatchObject({ charset: DESTINATION_CHARSET });
++  });
++
++  it("DESTINATION_CHARSET é UTF8MB4_0900_AI_CI, mesma collation do CREATE DATABASE e das migrations do App DB", () => {
++    expect(DESTINATION_CHARSET).toBe("UTF8MB4_0900_AI_CI");
++  });
++});

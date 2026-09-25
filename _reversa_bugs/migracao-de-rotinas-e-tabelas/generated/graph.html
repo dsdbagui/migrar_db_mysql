@@ -1,0 +1,136 @@
+<!-- GENERATED, DO NOT EDIT: regenerado por /reversa-debugger-graph em 2026-09-25T19:57:40Z a partir de 2 bugs -->
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grafo de Bugs · migracao-de-rotinas-e-tabelas</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --border: #2a2f3d;
+    --text: #e6e8ee;
+    --muted: #9aa1b2;
+    --accent: #6ea8fe;
+    --ok: #4fd18a;
+    --warn: #f2c14e;
+    --danger: #ff8a8a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 32px 16px 64px;
+  }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  h2 { font-size: 1.1rem; margin-top: 40px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .meta { color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; }
+  .legend { color: var(--muted); font-size: 0.78rem; margin-bottom: 28px; }
+  .stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 20px 0 32px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    min-width: 130px;
+  }
+  .stat .n { font-size: 1.5rem; font-weight: 700; }
+  .stat .l { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  svg { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  .node-box { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+  .node-box.high { stroke: var(--danger); }
+  .node-box.medium { stroke: var(--warn); }
+  .node-title { fill: var(--text); font-size: 12px; font-weight: 600; }
+  .node-sub { fill: var(--muted); font-size: 10px; }
+  .node-status { fill: var(--ok); font-size: 10px; font-weight: 600; }
+  a.node-link { cursor: pointer; }
+  a.node-link:hover .node-box { stroke: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .prose { color: var(--muted); font-size: 0.88rem; line-height: 1.6; margin-top: 12px; }
+  .empty { color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Grafo de Bugs · migracao-de-rotinas-e-tabelas</h1>
+  <div class="meta">Gerado por /reversa-debugger-graph em 2026-09-25T19:57:40Z · 2 bugs · 0 inconsistências</div>
+  <div class="legend">Legenda: arestas tracejadas = relação <code>proposed</code> (hipótese ainda não confirmada). Este contexto não tem nenhuma aresta.</div>
+
+  <div class="stats">
+    <div class="stat"><div class="n">2</div><div class="l">Total de bugs</div></div>
+    <div class="stat"><div class="n">2</div><div class="l">Resolved · fixed</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">Abertos / ativos</div></div>
+    <div class="stat"><div class="n">2</div><div class="l">Adendos de spec</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">Inconsistências</div></div>
+  </div>
+
+  <svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+    <a class="node-link" xlink:href="../bugs/BUG-20260925-EXY2-collation-conexao-set-names/bug.md">
+      <rect class="node-box high" x="60" y="60" width="340" height="100" rx="10" />
+      <text class="node-sub" x="80" y="86">#1 · BUG-20260925-EXY2</text>
+      <text class="node-title" x="80" y="106">Conexão de migração não define collation</text>
+      <text class="node-title" x="80" y="122">utf8mb4_0900_ai_ci antes do CREATE</text>
+      <text class="node-sub" x="80" y="140">high · migracao/connectionManager</text>
+      <text class="node-status" x="80" y="154">resolved · fixed</text>
+    </a>
+    <a class="node-link" xlink:href="../bugs/BUG-20260925-GQ4N-ignore-space-sql-mode-procedures/bug.md">
+      <rect class="node-box medium" x="500" y="60" width="340" height="100" rx="10" />
+      <text class="node-sub" x="520" y="86">#2 · BUG-20260925-GQ4N</text>
+      <text class="node-title" x="520" y="106">cleanSqlMode não remove IGNORE_SPACE</text>
+      <text class="node-title" x="520" y="122">do sql_mode das rotinas migradas</text>
+      <text class="node-sub" x="520" y="140">medium · migracao/routines</text>
+      <text class="node-status" x="520" y="154">resolved · fixed</text>
+    </a>
+  </svg>
+
+  <div class="prose">
+    Sem nó central: os dois bugs não têm aresta entre si. Vieram do mesmo relato do usuário e do mesmo
+    contexto de pasta (agrupamento por decisão de organização, não por relação causal), mas atingem
+    código e causa raiz distintos — <code>BUG-20260925-EXY2</code> na camada compartilhada de conexão
+    (<code>connectionManager.ts</code>), <code>BUG-20260925-GQ4N</code> só na transformação de rotinas
+    (<code>routines/transform.ts</code>).
+  </div>
+
+  <h2>Bugs abertos / ativos</h2>
+  <div class="empty">Nenhum — os 2 bugs deste contexto estão <code>resolved</code>.</div>
+
+  <h2>Concluídos (travados)</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>ID</th><th>Título</th><th>Sev/Prio</th><th>Fechado em</th><th>resolution_kind</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><a href="../bugs/BUG-20260925-EXY2-collation-conexao-set-names/bug.md">BUG-20260925-EXY2</a></td>
+        <td>Conexão de migração não define collation utf8mb4_0900_ai_ci antes do CREATE</td>
+        <td>high / P1</td>
+        <td>2026-09-25</td>
+        <td>fixed</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><a href="../bugs/BUG-20260925-GQ4N-ignore-space-sql-mode-procedures/bug.md">BUG-20260925-GQ4N</a></td>
+        <td>cleanSqlMode não remove IGNORE_SPACE do sql_mode das rotinas migradas</td>
+        <td>medium / P2</td>
+        <td>2026-09-25</td>
+        <td>fixed</td>
+      </tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

@@ -64,6 +64,27 @@ describe("cleanSqlMode", () => {
     expect(ddl).not.toContain("NO_AUTO_CREATE_USER");
     expect(issue?.code).toBe("SQL_MODE_NO_AUTO_CREATE_USER");
   });
+
+  it("remove IGNORE_SPACE do sql_mode (BUG-20260925-GQ4N)", () => {
+    const [ddl, issue] = cleanSqlMode("SQL_MODE='STRICT_TRANS_TABLES,IGNORE_SPACE'");
+    expect(ddl).not.toContain("IGNORE_SPACE");
+    expect(issue?.code).toBe("SQL_MODE_IGNORE_SPACE");
+    expect(issue?.severity).toBe("info");
+  });
+
+  it("remove NO_AUTO_CREATE_USER e IGNORE_SPACE juntos, preservando os demais tokens", () => {
+    const [ddl, issue] = cleanSqlMode(
+      "SQL_MODE='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,IGNORE_SPACE,NO_ZERO_DATE'",
+    );
+    expect(ddl).not.toContain("NO_AUTO_CREATE_USER");
+    expect(ddl).not.toContain("IGNORE_SPACE");
+    expect(ddl).toContain("STRICT_TRANS_TABLES");
+    expect(ddl).toContain("NO_ZERO_DATE");
+    // Quando os dois tokens aparecem juntos, o code do Issue prioriza o mais severo
+    // (NO_AUTO_CREATE_USER é error, IGNORE_SPACE é info) — a descrição continua citando os dois.
+    expect(issue?.code).toBe("SQL_MODE_NO_AUTO_CREATE_USER");
+    expect(issue?.description).toContain("IGNORE_SPACE");
+  });
 });
 
 describe("fixNoZeroDate", () => {

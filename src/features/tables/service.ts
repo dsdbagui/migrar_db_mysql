@@ -3,6 +3,7 @@ import {
   connect,
   connectWithAutoCreateDatabase,
   ensureConnected,
+  DESTINATION_CHARSET,
   type ConnectionParams,
 } from "../../core/connectionManager.js";
 import {
@@ -67,8 +68,11 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
   const params = ctx.params as unknown as TablesJobParams;
   if (!ctx.sourceParams) throw new Error("Feature 'tables' requer conexão de origem");
 
+  // BUG-20260925-EXY2: charset só no DESTINO — a ORIGEM pode ser um MySQL 5.x.
+  const destParams: ConnectionParams = { ...ctx.targetParams, charset: DESTINATION_CHARSET };
+
   let srcConn = await connect("ORIGEM", ctx.sourceParams);
-  let dstConn = await connectWithAutoCreateDatabase("DESTINO", ctx.targetParams, params.createDatabaseIfMissing);
+  let dstConn = await connectWithAutoCreateDatabase("DESTINO", destParams, params.createDatabaseIfMissing);
   const srcDb = ctx.sourceParams.database ?? "";
   const dstDb = ctx.targetParams.database ?? "";
 
@@ -84,7 +88,7 @@ export async function runTablesJob(ctx: FeatureRunContext): Promise<void> {
       if (await ctx.isCancelled()) break;
 
       srcConn = await ensureConnected(srcConn, "ORIGEM", ctx.sourceParams);
-      dstConn = await ensureConnected(dstConn, "DESTINO", ctx.targetParams);
+      dstConn = await ensureConnected(dstConn, "DESTINO", destParams);
 
       const item: JobItemResult = {
         itemType: "table",

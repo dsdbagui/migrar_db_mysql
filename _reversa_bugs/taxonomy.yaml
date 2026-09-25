@@ -1,0 +1,38 @@
+# Vocabulário controlado de area/module/feature para _reversa_bugs.
+# Semeado em 2026-09-25 a partir de src/features/, src/core/ e _reversa_sdd/ (specs por feature-folder).
+# Novo termo: proponha em Agent Notes do bug, nunca invente fora deste catálogo sem registrar a proposta.
+
+area:
+  - migracao        # execução de migração de rotinas/tabelas/config (núcleo do produto)
+  - auth            # login de aplicação, sessões, perfis de conexão
+  - relatorios      # geração de relatórios de migração
+  - infra           # deploy, nginx, App DB, ambiente de VM
+  - unclassified
+
+module:
+  - connectionManager   # src/core/connectionManager.ts — conexão, timeout, retry, auto-create db
+  - credentialVault     # src/core/credentialVault.ts
+  - jobRunner           # src/core/jobRunner.ts — orquestração de jobs
+  - routines            # src/features/routines/*
+  - tables              # src/features/tables/*
+  - reports             # src/features/reports/*
+  - jobs                # src/features/jobs/*
+  - authMiddleware       # src/core/authMiddleware.ts, authRoutes.ts, sessionStore.ts, appUsers.ts, passwordHash.ts, passwordPolicy.ts
+  - profileRoutes        # src/core/profileRoutes.ts
+  - frontend             # web/src/*
+  - unclassified
+
+feature:
+  - migracao-de-rotinas
+  - migracao-de-tabelas
+  - migracao-de-rotinas-e-tabelas   # concern compartilhado entre as duas (ex.: camada de conexão)
+  - arquivo-de-configuracao
+  - relatorios-de-migracao
+  - correcao-de-collation           # script legado standalone (fix_collation_stamp.py) — não confundir com collation da CONEXÃO da app web
+  - frontend-wizard-migracao-web
+  - timeout-conexao-job
+  - cancelamento-de-job
+  - historico-de-jobs
+  - perfil-conexao-por-usuario
+  - redefinicao-de-senha
+  - unclassified

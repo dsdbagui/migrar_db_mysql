@@ -14,7 +14,21 @@ export interface ConnectionParams {
   user: string;
   password: string;
   database?: string;
+  /**
+   * BUG-20260925-EXY2: charset/collation explícito da conexão (ex. "UTF8MB4_0900_AI_CI").
+   * Deixe ausente para conexões com a ORIGEM — um MySQL 5.x pode não reconhecer collations
+   * introduzidas no MySQL 8 (ex. utf8mb4_0900_ai_ci, charset id 255). Use DESTINATION_CHARSET
+   * só para a conexão de DESTINO.
+   */
+  charset?: string;
 }
+
+/**
+ * BUG-20260925-EXY2: collation padrão do DESTINO, a mesma já usada no CREATE DATABASE logo
+ * abaixo e em todas as migrations do App DB (src/core/db/migrations/*.sql). Sem isso, o mysql2
+ * aplica seu próprio default (UTF8MB4_UNICODE_CI — connection_config.js:176), divergente do destino.
+ */
+export const DESTINATION_CHARSET = "UTF8MB4_0900_AI_CI";
 
 export type MigrationConnection = mysql.Connection;
 
@@ -52,6 +66,7 @@ export async function connect(label: string, params: ConnectionParams): Promise<
         user: params.user,
         password: params.password,
         database: params.database,
+        charset: params.charset,
         multipleStatements: false,
         connectTimeout,
       });

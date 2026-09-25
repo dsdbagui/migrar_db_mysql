@@ -1,4 +1,4 @@
-import { makeIssue, type Issue } from "../../core/issue.js";
+import { makeIssue, type Issue, type IssueCode, type IssueSeverity } from "../../core/issue.js";
 
 /**
  * Porte 1:1 de remove_definer + as 8 funções da lista TRANSFORMATIONS
@@ -51,19 +51,50 @@ export const fixOldPasswordHash: Transformation = (ddl) => {
   ];
 };
 
+/**
+ * BUG-20260925-GQ4N: NO_AUTO_CREATE_USER é mesmo inválido no MySQL 8 (severidade error).
+ * IGNORE_SPACE continua válido no MySQL 8 — removido aqui por decisão operacional do time
+ * de migração, não por incompatibilidade (severidade info, para não sugerir que quebraria).
+ */
+const SQL_MODE_FIXES: Array<{ pattern: RegExp; label: string; code: IssueCode; severity: IssueSeverity; reason: string }> = [
+  {
+    pattern: /NO_AUTO_CREATE_USER/i,
+    label: "NO_AUTO_CREATE_USER",
+    code: "SQL_MODE_NO_AUTO_CREATE_USER",
+    severity: "error",
+    reason: "inválido no MySQL 8",
+  },
+  {
+    pattern: /IGNORE_SPACE/i,
+    label: "IGNORE_SPACE",
+    code: "SQL_MODE_IGNORE_SPACE",
+    severity: "info",
+    reason: "removido do sql_mode por decisão operacional (ainda válido no MySQL 8)",
+  },
+];
+
 export const cleanSqlMode: Transformation = (ddl) => {
-  if (!/NO_AUTO_CREATE_USER/i.test(ddl)) return [ddl, null];
-  const newDdl = ddl.replace(/,?\s*NO_AUTO_CREATE_USER/gi, "");
-  return [
-    newDdl,
-    makeIssue(
-      "SQL_MODE_NO_AUTO_CREATE_USER",
-      "error",
-      "NO_AUTO_CREATE_USER removido do sql_mode (inválido no MySQL 8)",
-      "NO_AUTO_CREATE_USER",
-      "(removido)",
-    ),
-  ];
+  const found = SQL_MODE_FIXES.filter((f) => f.pattern.test(ddl));
+  if (found.length === 0) return [ddl, null];
+
+  let newDdl = ddl;
+  for (const f of found) {
+    newDdl = newDdl.replace(new RegExp(`,?\\s*${f.label}`, "gi"), "");
+  }
+
+  // found.length >= 1 garantido pelo early-return acima; a asserção só documenta isso ao TS
+  // (noUncheckedIndexedAccess não enxerga essa garantia via found.length).
+  const primary = found.find((f) => f.severity === "error") ?? found[0]!;
+  const labels = found.map((f) => f.label).join(", ");
+
+  if (found.length === 1) {
+    return [
+      newDdl,
+      makeIssue(primary.code, primary.severity, `${primary.label} removido do sql_mode (${primary.reason})`, primary.label, "(removido)"),
+    ];
+  }
+
+  return [newDdl, makeIssue(primary.code, primary.severity, `${labels} removidos do sql_mode`, labels, "(removido)")];
 };
 
 export const fixNoZeroDate: Transformation = (ddl) => {
