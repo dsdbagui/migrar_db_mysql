@@ -37,9 +37,11 @@ export function renderJobStatus(container: HTMLElement, params: { feature: strin
     }
     const res = await api.getJobStatus(feature, jobId);
 
-    if (res.status === 0) {
+    // 5xx também é transitório: um 502 do nginx enquanto o systemd reinicia o backend não pode
+    // congelar a tela num status antigo — continua sondando até o backend voltar.
+    if (res.status === 0 || res.status >= 500) {
       consecutiveNetworkFailures += 1;
-      alertBox.innerHTML = `<div class="alert warning">${friendlyError(0, "job")} (tentativa ${consecutiveNetworkFailures})</div>`;
+      alertBox.innerHTML = `<div class="alert warning">${friendlyError(res.status, "job")} (tentativa ${consecutiveNetworkFailures})</div>`;
       scheduleNext();
       return;
     }

@@ -272,6 +272,22 @@ export async function runJob(jobId: string, runner: FeatureRunner): Promise<void
   }
 }
 
+/**
+ * Jobs roda dentro do próprio processo (sem fila), então qualquer job em pending/running quando o
+ * servidor sobe ficou órfão de um processo anterior que morreu (ex. heap esgotado) — nenhum
+ * runner o retomará. Sem isto ele ficaria "em execução" para sempre. Chamar só na inicialização.
+ */
+export async function failOrphanedJobs(): Promise<number> {
+  const db = getAppDb();
+  const [result] = await db.query<any>(
+    `UPDATE migration_jobs
+     SET status = 'failed', finished_at = NOW(),
+         error_message = 'Servidor reiniciado durante a execução do job (o processo anterior foi encerrado). Rode a migração novamente.'
+     WHERE status IN ('pending', 'running')`,
+  );
+  return result.affectedRows ?? 0;
+}
+
 export async function getJobStatus(jobId: string): Promise<{
   id: string;
   feature: MigrationFeature;
