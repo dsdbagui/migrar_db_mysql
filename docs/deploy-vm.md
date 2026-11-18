@@ -193,7 +193,7 @@ sudo tee /etc/systemd/system/migracao-api.service >/dev/null <<'EOF'
 [Unit]
 Description=migra_db_mysql API
 After=network.target mysql.service
-Requires=mysql.service
+Wants=mysql.service
 
 [Service]
 User=migracao
@@ -201,7 +201,7 @@ Group=migracao
 WorkingDirectory=/opt/migracao/app
 EnvironmentFile=/etc/migracao/vault.env
 ExecStart=/usr/bin/node --env-file=.env dist/server.js
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=full
@@ -214,6 +214,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now migracao-api
 sudo systemctl status migracao-api --no-pager
 ```
+
+`Wants=` (e não `Requires=`): com `Requires=`, uma parada do MySQL (ex. atualização automática do pacote) derruba a API com SIGTERM, e como essa parada é "limpa", `Restart=on-failure` não a reinicia nem quando o MySQL volta. Com `Wants=` a API continua no ar e o pool do `mysql2` reconecta sozinho; `Restart=always` cobre qualquer outro encerramento (um `systemctl stop` manual continua valendo).
 
 A chave chega ao processo pelo `EnvironmentFile`. Variáveis já definidas no ambiente têm precedência sobre o `.env`.
 
@@ -303,7 +305,7 @@ Antes de atualizar, confira se não há job em execução (tela "Histórico"): o
 | Sintoma | Causa provável |
 | --- | --- |
 | Login "funciona", mas volta sempre para a tela de login | Acesso por HTTP em vez de HTTPS: o cookie `Secure` é descartado |
-| `502 Bad Gateway` em `/api/...` | Backend parado: `systemctl status migracao-api`, `journalctl -u migracao-api` |
+| `502 Bad Gateway` em `/api/...` (no login aparece como "Erro interno no servidor") | Backend parado: `systemctl status migracao-api`, `journalctl -u migracao-api`. Se estiver `inactive (dead)` com `signal=TERM` logo após uma atualização do MySQL, a unit ainda usa `Requires=mysql.service` — troque por `Wants=` e `Restart=always` (passo 9) |
 | Backend não sobe: `CREDENTIAL_VAULT_KEY não configurada` | `/etc/migracao/vault.env` ausente ou fora do `EnvironmentFile` |
 | Página não abre de fora, mas `curl` na VM funciona | `iptables` da VM (passo 2) ou NSG/Security List da OCI |
 | Nome não resolve num Mac/Linux | Domínio `.local` indo para o mDNS (ver Pré-requisitos) |
